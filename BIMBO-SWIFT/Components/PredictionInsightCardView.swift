@@ -48,6 +48,9 @@ struct PredictionInsightCardView: View {
                 .stroke(AppColors.cardBorder, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 20))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(prediction.categoryName)
+        .accessibilityValue(accessibilitySummary)
     }
 
     private func metricBlock(title: String, value: String) -> some View {
@@ -60,5 +63,9 @@ struct PredictionInsightCardView: View {
                 .font(.title3.weight(.bold))
                 .foregroundStyle(AppColors.accentRed)
         }
+    }
+
+    private var accessibilitySummary: String {
+        "\(trendLabel). Current average \(Int(prediction.currentAverage.rounded())) units. Next predicted order \(Int(prediction.predictedNextOrder.rounded())) units. Trend delta \(Int(abs(prediction.trendDelta).rounded())) units."
     }
 }

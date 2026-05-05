@@ -21,6 +21,10 @@ struct SectionHeaderView: View {
             
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(subtitle)
+        .accessibilityAddTraits(.isHeader)
     }
 }
 #Preview {

@@ -99,6 +99,9 @@ struct ClientCardView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .shadow(color: AppColors.primaryBlue.opacity(0.08), radius: 18, x: 0, y: 10)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(client.name)
+        .accessibilityValue(accessibilitySummary)
     }
 
     private var topProducts: [String] {
@@ -136,5 +139,13 @@ struct ClientCardView: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(AppColors.backgroundWhite)
         )
+    }
+
+    private var accessibilitySummary: String {
+        let productsSummary = topProducts.isEmpty
+            ? "No order history"
+            : "Top products: \(topProducts.joined(separator: ", "))"
+
+        return "Client ID \(client.id). Rating \(client.rating) out of 5. Average weekly units \(Int(client.weeklyPurchaseAverage.rounded())). \(productsSummary)."
     }
 }

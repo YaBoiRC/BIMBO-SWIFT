@@ -17,5 +17,7 @@ struct FlexibleTagListView: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Categories")
     }
 }

@@ -27,5 +27,8 @@ struct SummaryMetricCardView: View {
                 .stroke(AppColors.cardBorder, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 18))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(value)
     }
 }

@@ -13,5 +13,7 @@ struct CategoryTagView: View {
                 Capsule()
                     .fill(AppColors.primaryBlue.opacity(0.12))
             )
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Category \(title)")
     }
 }

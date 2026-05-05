@@ -59,6 +59,9 @@ struct MapSectionView: View {
                                         .fill(Color.white.opacity(0.92))
                                 )
                         }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Stop \(index + 1), \(client.name)")
+                        .accessibilityValue("Latitude \(client.latitude), longitude \(client.longitude)")
                     }
                 }
 
@@ -71,6 +74,8 @@ struct MapSectionView: View {
         .frame(maxWidth: .infinity)
         .frame(height: 300)
         .clipped()
+        .accessibilityLabel("Route map")
+        .accessibilityValue(accessibilityRouteSummary)
         .onAppear {
             locationManager.requestPermission()
         }
@@ -141,6 +146,17 @@ struct MapSectionView: View {
     private func distance(from source: CLLocationCoordinate2D, to destination: CLLocationCoordinate2D) -> CLLocationDistance {
         CLLocation(latitude: source.latitude, longitude: source.longitude)
             .distance(from: CLLocation(latitude: destination.latitude, longitude: destination.longitude))
+    }
+
+    private var accessibilityRouteSummary: String {
+        guard !orderedClients.isEmpty else {
+            return "No destinations available."
+        }
+
+        let stops = orderedClients.enumerated()
+            .map { "Stop \($0.offset + 1), \($0.element.name)" }
+            .joined(separator: ". ")
+        return "Nearest first route. \(stops)."
     }
 }
 
