@@ -7,6 +7,7 @@ struct ContentView: View {
         TabView {
             DashboardView(clients: clients)
             ClientsListView(clients: clients)
+            SurtidoView()
             CategoriesView(categories: ClientRepository.categories)
             SettingsView()
         }
