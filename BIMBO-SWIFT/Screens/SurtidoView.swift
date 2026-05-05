@@ -7,20 +7,16 @@ struct SurtidoView: View {
 
     @State private var selectedWallIndex = 1
     @State private var selectedShelfIndex = 0
-    @State private var isShowingDisembarkModal = false
-    @State private var currentClientStepIndex = 0
-    @State private var disembarkStep: DisembarkStep = .validation
-    @State private var currentStoreInventory = 0
-    @State private var desiredTotalInventory = 0
-    @State private var requestedPurchaseQuantity = 0
-    @State private var spoiledProductQuantity = 0
-    @State private var currentStoreInventoryText = "0"
-    @State private var desiredTotalInventoryText = "0"
-    @State private var requestedPurchaseQuantityText = "0"
-    @State private var spoiledProductQuantityText = "0"
-    @State private var replenishmentMode: ReplenishmentMode = .targetTotal
-    @State private var categoryValidationDrafts: [CategoryValidationDraft] = []
+    @State private var isShowingValidationModal = false
+    @State private var currentClientRouteIndex = 0
+    @State private var validationStep: ValidationStep = .validate
+    @State private var categoryDrafts: [CategoryValidationDraft] = []
     @State private var selectedCategoryDraftID: UUID?
+    @State private var aiGuideDirectives: [UnloadDirective] = []
+    @State private var aiGuideStatusMessage: String?
+    @State private var isGeneratingAIGuide = false
+    @State private var aiGuideClientID: String?
+    @State private var isNarratingGuide = false
 
     init() {
         let clients = ClientRepository.sampleClients
@@ -45,13 +41,16 @@ struct SurtidoView: View {
     }
 
     private var activeRouteStop: ClientRouteStop? {
-        guard routeStops.indices.contains(currentClientStepIndex) else { return nil }
-        return routeStops[currentClientStepIndex]
+
+        guard routeStops.indices.contains(currentClientRouteIndex) else { return nil }
+        return routeStops[currentClientRouteIndex]
     }
 
     private var selectedCategoryIndex: Int? {
         guard let selectedCategoryDraftID else { return nil }
-        return categoryValidationDrafts.firstIndex { $0.id == selectedCategoryDraftID }
+
+        return categoryDrafts.firstIndex { $0.id == selectedCategoryDraftID }
+
     }
 
     var body: some View {
@@ -60,14 +59,14 @@ struct SurtidoView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     SectionHeaderView(
                         title: "Surtir",
-                        subtitle: "Slots ocupados con prediccion ML por cliente y rotacion FIFO semanal."
+                        subtitle: "Slots ocupados con prediccion ML por cliente y validacion de tienda."
                     )
 
                     roomOverview
                     selectedWallSummary
                     mlSummaryCard
                     clientLegend
-                    disembarkActionCard
+                    validationActionCard
                     shelfSelector
                     selectedShelfCard
                 }
@@ -80,9 +79,9 @@ struct SurtidoView: View {
         .tabItem {
             Label("Surtir", systemImage: "shippingbox.circle.fill")
         }
-        .sheet(isPresented: $isShowingDisembarkModal) {
+        .sheet(isPresented: $isShowingValidationModal) {
             if let routeStop = activeRouteStop {
-                disembarkSheet(for: routeStop)
+                validationModal(for: routeStop)
             }
         }
     }
@@ -134,7 +133,7 @@ struct SurtidoView: View {
                         .font(.title3.weight(.bold))
                         .foregroundStyle(AppColors.accentRed)
 
-                    Text("Los productos salen en Queue del slot 1 al 10. Cuando se rellena una bandeja, vuelve a iniciar desde el slot 1 la siguiente semana.")
+                    Text("Cada bandeja mantiene un solo producto y una sola fecha de caducidad.")
                         .font(.subheadline)
                         .foregroundStyle(AppColors.secondaryText)
                 }
@@ -191,7 +190,7 @@ struct SurtidoView: View {
                 )
             }
 
-            Text("La ocupacion de slots se deriva de la prediccion de la proxima semana por cliente y categoria, convertida a capacidad de bandeja.")
+            Text("La ocupacion de slots se deriva de la prediccion de la proxima semana por cliente y categoria.")
                 .font(.caption)
                 .foregroundStyle(AppColors.secondaryText)
         }
@@ -263,13 +262,14 @@ struct SurtidoView: View {
         }
     }
 
-    private var disembarkActionCard: some View {
+
+    private var validationActionCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Desembarque por cliente")
+            Text("Validacion de desembarque")
                 .font(.headline)
                 .foregroundStyle(AppColors.primaryBlue)
 
-            Text("Primero valida inventario, venta real, meta de compra y merma. Despues ejecuta la descarga segun el orden previsto.")
+            Text("Valida por categoria lo que hay en tienda y decide si capturas inventario por piezas o por peso total.")
                 .font(.subheadline)
                 .foregroundStyle(AppColors.secondaryText)
 
@@ -280,9 +280,9 @@ struct SurtidoView: View {
             }
 
             Button {
-                startDisembarkWorkflow()
+                startValidationWorkflow()
             } label: {
-                Label("Iniciar desembarque", systemImage: "arrow.down.circle.fill")
+                Label("Iniciar validacion", systemImage: "checklist")
                     .font(.headline.weight(.bold))
                     .foregroundStyle(Color.white)
                     .frame(maxWidth: .infinity)
@@ -529,69 +529,45 @@ struct SurtidoView: View {
         )
     }
 
-    private func startDisembarkWorkflow() {
-        currentClientStepIndex = 0
-        resetDisembarkForm()
+    private func startValidationWorkflow() {
+        currentClientRouteIndex = 0
+        validationStep = .validate
+        aiGuideDirectives = []
+        aiGuideStatusMessage = nil
+        aiGuideClientID = nil
         if let routeStop = activeRouteStop {
-            configureCategoryDrafts(for: routeStop)
+            configureDrafts(for: routeStop)
         }
-        isShowingDisembarkModal = true
+        isShowingValidationModal = true
     }
 
-    private func resetDisembarkForm() {
-        disembarkStep = .validation
-        currentStoreInventory = 0
-        desiredTotalInventory = 0
-        requestedPurchaseQuantity = 0
-        spoiledProductQuantity = 0
-        currentStoreInventoryText = "0"
-        desiredTotalInventoryText = "0"
-        requestedPurchaseQuantityText = "0"
-        spoiledProductQuantityText = "0"
-        replenishmentMode = .targetTotal
-        categoryValidationDrafts = []
-        selectedCategoryDraftID = nil
-    }
-
-    private func advanceToNextClientOrClose() {
-        if currentClientStepIndex + 1 < routeStops.count {
-            currentClientStepIndex += 1
-            resetDisembarkForm()
-            if let routeStop = activeRouteStop {
-                configureCategoryDrafts(for: routeStop)
-            }
-        } else {
-            isShowingDisembarkModal = false
-        }
-    }
-
-    private func configureCategoryDrafts(for routeStop: ClientRouteStop) {
-        categoryValidationDrafts = routeStop.categories.map { category in
+    private func configureDrafts(for routeStop: ClientRouteStop) {
+        categoryDrafts = routeStop.categories.map { category in
             CategoryValidationDraft(
                 categoryName: category.categoryName,
-                isValidated: false,
-                currentInventory: 0,
-                currentInventoryText: "0",
-                spoiledQuantity: 0,
+                productName: category.productName,
+                unitWeightKg: category.unitWeightKg,
+                estimatedSales: category.suggestedSlots,
+                inputMode: .units,
+                currentInventoryUnitsText: "0",
+                currentInventoryWeightText: "0",
                 spoiledQuantityText: "0",
                 replenishmentMode: .targetTotal,
-                targetTotal: category.suggestedSlots,
                 targetTotalText: String(category.suggestedSlots),
-                purchaseQuantity: category.suggestedSlots,
                 purchaseQuantityText: String(category.suggestedSlots),
-                estimatedSales: category.suggestedSlots
+                isValidated: false
             )
         }
-        selectedCategoryDraftID = categoryValidationDrafts.first?.id
+        selectedCategoryDraftID = categoryDrafts.first?.id
     }
 
-    private func disembarkSheet(for routeStop: ClientRouteStop) -> some View {
+    private func validationModal(for routeStop: ClientRouteStop) -> some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Cliente #\(currentClientStepIndex + 1)")
+                            Text("Cliente #\(currentClientRouteIndex + 1)")
                                 .font(.caption.weight(.bold))
                                 .foregroundStyle(AppColors.secondaryText)
 
@@ -599,7 +575,7 @@ struct SurtidoView: View {
                                 .font(.title3.weight(.bold))
                                 .foregroundStyle(AppColors.primaryBlue)
 
-                            Text("Orden previsto: \(routeStop.totalSlots) productos en \(routeStop.totalTrayCount) bandejas.")
+                            Text("ML sugiere \(routeStop.totalSlots) productos a surtir.")
                                 .font(.subheadline)
                                 .foregroundStyle(AppColors.secondaryText)
                         }
@@ -611,21 +587,21 @@ struct SurtidoView: View {
                             .frame(width: 18, height: 18)
                     }
 
-                    if disembarkStep == .validation {
-                        validationStep(for: routeStop)
+                    if validationStep == .validate {
+                        validationStepView
                     } else {
-                        unloadStep(for: routeStop)
+                        unloadStepView(for: routeStop)
                     }
                 }
                 .padding(20)
             }
             .background(AppColors.backgroundWhite.ignoresSafeArea())
-            .navigationTitle("Desembarque")
+            .navigationTitle("Validacion")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cerrar") {
-                        isShowingDisembarkModal = false
+                        isShowingValidationModal = false
                     }
                 }
             }
@@ -633,24 +609,54 @@ struct SurtidoView: View {
         .presentationDetents([.large])
     }
 
-    private func validationStep(for routeStop: ClientRouteStop) -> some View {
+    private var validationStepView: some View {
         VStack(alignment: .leading, spacing: 18) {
-            modalSectionTitle("1. Validacion previa")
-
-            Text("Primero valida el estado actual del cliente antes de decidir la descarga.")
-                .font(.subheadline)
-                .foregroundStyle(AppColors.secondaryText)
+            sectionTitle("1. Validacion por categoria")
 
             inputCard {
-                Text("Categorias a validar")
+                Text("Categoria")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AppColors.primaryBlue)
 
-                Text("Selecciona una categoria del pick list, valida sus valores y guarda esa revision.")
-                    .font(.caption)
-                    .foregroundStyle(AppColors.secondaryText)
+                Menu {
+                    ForEach(categoryDrafts) { draft in
+                        Button {
+                            selectedCategoryDraftID = draft.id
+                        } label: {
+                            Label(draft.categoryName, systemImage: draft.isValidated ? "checkmark.circle.fill" : "circle")
+                        }
+                    }
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(selectedCategory?.categoryName ?? "Selecciona una categoria")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(AppColors.primaryBlue)
+                            Text(selectedCategory?.productName ?? "")
+                                .font(.caption)
+                                .foregroundStyle(AppColors.secondaryText)
+                        }
 
-                categoryPickList
+                        Spacer()
+
+                        if selectedCategory?.isValidated == true {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(AppColors.accentRed)
+                        }
+
+                        Image(systemName: "chevron.up.chevron.down")
+                            .foregroundStyle(AppColors.secondaryText)
+                    }
+                    .padding(14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(AppColors.backgroundWhite)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(AppColors.cardBorder, lineWidth: 1)
+                    )
+                }
             }
 
             if let selectedCategoryIndex {
@@ -658,27 +664,173 @@ struct SurtidoView: View {
             }
 
             Button {
-                disembarkStep = .unload
+                validationStep = .unload
             } label: {
-                Text("Validar y pasar a desembarque")
+                Text("Pasar a desembarque")
                     .font(.headline.weight(.bold))
                     .foregroundStyle(Color.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(AppColors.accentRed)
+                            .fill(hasValidatedCategories ? AppColors.accentRed : AppColors.cardBorder)
                     )
             }
+            .disabled(!hasValidatedCategories)
             .buttonStyle(.plain)
         }
     }
 
-    private func unloadStep(for routeStop: ClientRouteStop) -> some View {
+    private var selectedCategory: CategoryValidationDraft? {
+        guard let selectedCategoryIndex else { return nil }
+        return categoryDrafts[selectedCategoryIndex]
+    }
+
+    private var hasValidatedCategories: Bool {
+        categoryDrafts.contains(where: \.isValidated)
+    }
+
+    private func categoryValidationCard(for index: Int) -> some View {
+        let unitWeightGrams = categoryDrafts[index].unitWeightKg * 1000
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(categoryDrafts[index].categoryName)
+                        .font(.headline)
+                        .foregroundStyle(AppColors.primaryBlue)
+                    Text("Peso unitario: \(Int(unitWeightGrams.rounded())) gr")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.secondaryText)
+                }
+
+                Spacer()
+
+                if categoryDrafts[index].isValidated {
+                    Label("Validada", systemImage: "checkmark.circle.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.accentRed)
+                }
+            }
+
+            inputCard {
+                Text("Producto actual en tienda")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppColors.primaryBlue)
+
+                Picker("Modo de captura", selection: $categoryDrafts[index].inputMode) {
+                    ForEach(InventoryInputMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                if categoryDrafts[index].inputMode == .units {
+                    numericTextField(
+                        title: "Piezas actuales",
+                        text: $categoryDrafts[index].currentInventoryUnitsText,
+                        prompt: "Ej. 12"
+                    )
+                } else {
+                    numericTextField(
+                        title: "Peso total en gramos",
+                        text: $categoryDrafts[index].currentInventoryWeightText,
+                        prompt: "Ej. 100"
+                    )
+
+                    Text("Equivale a \(unitsFromWeight(categoryDrafts[index])) piezas aprox.")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.secondaryText)
+                }
+            }
+
+            inputCard {
+                numericTextField(
+                    title: "Producto echado a perder",
+                    text: $categoryDrafts[index].spoiledQuantityText,
+                    prompt: "Ej. 3"
+                )
+            }
+
+            inputCard {
+                Text("Objetivo del cliente")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppColors.primaryBlue)
+
+                Picker("Objetivo", selection: $categoryDrafts[index].replenishmentMode) {
+                    ForEach(ReplenishmentMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                if categoryDrafts[index].replenishmentMode == .targetTotal {
+                    numericTextField(
+                        title: "Cuanto quiere tener en total",
+                        text: $categoryDrafts[index].targetTotalText,
+                        prompt: "Ej. 40"
+                    )
+                } else {
+                    numericTextField(
+                        title: "Cuanto quiere comprar",
+                        text: $categoryDrafts[index].purchaseQuantityText,
+                        prompt: "Ej. 18"
+                    )
+                }
+            }
+
+            Button {
+                categoryDrafts[index].isValidated = true
+            } label: {
+                Label("Guardar validacion", systemImage: "checkmark.circle.fill")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(Color.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(AppColors.primaryBlue)
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.white)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(AppColors.cardBorder, lineWidth: 1)
+        )
+    }
+
+    private func numericTextField(title: String, text: Binding<String>, prompt: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppColors.primaryBlue)
+
+            TextField(prompt, text: sanitizedDigitsBinding(text))
+                .keyboardType(.numberPad)
+                .textFieldStyle(.roundedBorder)
+        }
+    }
+
+    private func sanitizedDigitsBinding(_ binding: Binding<String>) -> Binding<String> {
+        Binding(
+            get: { binding.wrappedValue },
+            set: { newValue in
+                binding.wrappedValue = newValue.filter(\.isNumber)
+            }
+        )
+    }
+
+    private func unloadStepView(for routeStop: ClientRouteStop) -> some View {
         let recommendation = buildUnloadRecommendation(for: routeStop)
 
         return VStack(alignment: .leading, spacing: 18) {
-            modalSectionTitle("2. Desembarque")
+            sectionTitle("2. Desembarque")
 
             inputCard {
                 summaryLine("Venta estimada automatica", "\(recommendation.actualSold) productos")
@@ -700,24 +852,9 @@ struct SurtidoView: View {
                             summaryLine("Inventario util", "\(category.usableInventory)")
                             summaryLine("Merma", "\(category.spoiled)")
                             summaryLine("Objetivo", "\(category.targetQuantity)")
-                            summaryLine("ML", "\(category.mlSuggested)")
                         }
                     }
                 }
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Descarga recomendada")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppColors.primaryBlue)
-
-                Text("\(recommendation.finalUnload) productos")
-                    .font(.system(size: 34, weight: .black, design: .rounded))
-                    .foregroundStyle(AppColors.accentRed)
-
-                Text("Se usa el mayor valor entre la necesidad validada en tienda y la sugerencia del modelo.")
-                    .font(.caption)
-                    .foregroundStyle(AppColors.secondaryText)
             }
 
             VStack(alignment: .leading, spacing: 10) {
@@ -725,18 +862,105 @@ struct SurtidoView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AppColors.primaryBlue)
 
-                Text("Sigue esta lista en orden para bajar producto del camion y ubicarlo rapido en tienda.")
-                    .font(.caption)
-                    .foregroundStyle(AppColors.secondaryText)
+                inputCard {
+                    Text("Asistente AI de desembarque")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppColors.primaryBlue)
 
-                ForEach(routeStop.trayAssignments) { assignment in
+                    Text("Genera una guia paso a paso con steps y stopers basada en estas bandejas.")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.secondaryText)
+
+                    Button {
+                        Task {
+                            await generateAIGuide(for: routeStop, recommendation: recommendation)
+                        }
+                    } label: {
+                        HStack {
+                            if isGeneratingAIGuide {
+                                ProgressView()
+                                    .tint(.white)
+                            }
+
+                            Text(isGeneratingAIGuide ? "Generando guia..." : "Generar guia AI")
+                                .font(.headline.weight(.bold))
+                        }
+                        .foregroundStyle(Color.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(isGeneratingAIGuide ? AppColors.cardBorder : AppColors.primaryBlue)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isGeneratingAIGuide)
+
+                    if let aiGuideStatusMessage {
+                        Text(aiGuideStatusMessage)
+                            .font(.caption)
+                            .foregroundStyle(AppColors.secondaryText)
+                    }
+
+                    if aiGuideClientID == routeStop.client.id, !aiGuideDirectives.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 10) {
+                                Button {
+                                    speakAIGuide()
+                                } label: {
+                                    Label(
+                                        isNarratingGuide ? "Reproduciendo..." : "Narrar pasos",
+                                        systemImage: "speaker.wave.2.fill"
+                                    )
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(Color.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                            .fill(isNarratingGuide ? AppColors.cardBorder : AppColors.accentRed)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(isNarratingGuide)
+
+                                Button {
+                                    stopSpeakingAIGuide()
+                                } label: {
+                                    Label("Detener voz", systemImage: "stop.fill")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(AppColors.primaryBlue)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                                .fill(Color.white)
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                                .stroke(AppColors.cardBorder, lineWidth: 1)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            ForEach(aiGuideDirectives) { directive in
+                                aiDirectiveCard(directive)
+                            }
+                        }
+                    }
+                }
+
+                ForEach(routeStop.trayAssignments.filter { assignment in
+                    recommendation.categories.contains { $0.categoryName == assignment.categoryName }
+                }) { assignment in
                     unloadAssignmentCard(assignment, color: routeStop.client.color)
                 }
             }
 
             HStack(spacing: 12) {
                 Button {
-                    disembarkStep = .validation
+                    validationStep = .validate
                 } label: {
                     Text("Editar validacion")
                         .font(.subheadline.weight(.semibold))
@@ -755,9 +979,9 @@ struct SurtidoView: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    advanceToNextClientOrClose()
+                    moveToNextClientOrClose()
                 } label: {
-                    Text(currentClientStepIndex + 1 < routeStops.count ? "Siguiente cliente" : "Finalizar")
+                    Text(currentClientRouteIndex + 1 < routeStops.count ? "Siguiente cliente" : "Finalizar")
                         .font(.headline.weight(.bold))
                         .foregroundStyle(Color.white)
                         .frame(maxWidth: .infinity)
@@ -772,256 +996,25 @@ struct SurtidoView: View {
         }
     }
 
-    private func modalSectionTitle(_ title: String) -> some View {
+    private func moveToNextClientOrClose() {
+        if currentClientRouteIndex + 1 < routeStops.count {
+            currentClientRouteIndex += 1
+            validationStep = .validate
+            aiGuideDirectives = []
+            aiGuideStatusMessage = nil
+            aiGuideClientID = nil
+            if let routeStop = activeRouteStop {
+                configureDrafts(for: routeStop)
+            }
+        } else {
+            isShowingValidationModal = false
+        }
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
         Text(title)
             .font(.headline)
             .foregroundStyle(AppColors.primaryBlue)
-    }
-
-    private var categoryPickList: some View {
-        Menu {
-            ForEach(categoryValidationDrafts) { draft in
-                Button {
-                    selectedCategoryDraftID = draft.id
-                } label: {
-                    Label {
-                        Text(draft.categoryName)
-                    } icon: {
-                        Image(systemName: draft.isValidated ? "checkmark.circle.fill" : "circle")
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Categoria")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppColors.secondaryText)
-
-                    Text(selectedCategoryLabel)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppColors.primaryBlue)
-                        .multilineTextAlignment(.leading)
-                }
-
-                Spacer()
-
-                if let selectedCategoryIndex, categoryValidationDrafts[selectedCategoryIndex].isValidated {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(AppColors.accentRed)
-                }
-
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(AppColors.secondaryText)
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(AppColors.backgroundWhite)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(AppColors.cardBorder, lineWidth: 1)
-            )
-        }
-    }
-
-    private var selectedCategoryLabel: String {
-        guard let selectedCategoryIndex else { return "Selecciona una categoria" }
-        return categoryValidationDrafts[selectedCategoryIndex].categoryName
-    }
-
-    private func categoryValidationCard(for index: Int) -> some View {
-        let draft = categoryValidationDrafts[index]
-
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(draft.categoryName)
-                        .font(.headline)
-                        .foregroundStyle(AppColors.primaryBlue)
-
-                    Text("Venta estimada automatica: \(draft.estimatedSales) productos")
-                        .font(.caption)
-                        .foregroundStyle(AppColors.secondaryText)
-                }
-
-                Spacer()
-
-                if draft.isValidated {
-                    Label("Validada", systemImage: "checkmark.circle.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppColors.accentRed)
-                }
-            }
-
-            counterInputCard(
-                title: "Producto actual en tienda",
-                subtitle: "Piezas utiles de esta categoria.",
-                value: $categoryValidationDrafts[index].currentInventory,
-                textValue: $categoryValidationDrafts[index].currentInventoryText,
-                accent: AppColors.primaryBlue
-            )
-
-            counterInputCard(
-                title: "Producto echado a perder",
-                subtitle: "Merma o producto que se va a retirar.",
-                value: $categoryValidationDrafts[index].spoiledQuantity,
-                textValue: $categoryValidationDrafts[index].spoiledQuantityText,
-                accent: AppColors.accentRed
-            )
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Objetivo del cliente")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppColors.primaryBlue)
-
-                Picker("Objetivo", selection: $categoryValidationDrafts[index].replenishmentMode) {
-                    ForEach(ReplenishmentMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                if categoryValidationDrafts[index].replenishmentMode == .targetTotal {
-                    counterInputCard(
-                        title: "Cuanto quiere tener en total",
-                        subtitle: "Nivel ideal para esta categoria.",
-                        value: $categoryValidationDrafts[index].targetTotal,
-                        textValue: $categoryValidationDrafts[index].targetTotalText,
-                        accent: AppColors.primaryBlue
-                    )
-                } else {
-                    counterInputCard(
-                        title: "Cuanto quiere comprar",
-                        subtitle: "Compra puntual para esta categoria.",
-                        value: $categoryValidationDrafts[index].purchaseQuantity,
-                        textValue: $categoryValidationDrafts[index].purchaseQuantityText,
-                        accent: AppColors.primaryBlue
-                    )
-                }
-            }
-
-            Button {
-                categoryValidationDrafts[index].isValidated = true
-            } label: {
-                Label(
-                    draft.isValidated ? "Validacion guardada" : "Guardar validacion de categoria",
-                    systemImage: draft.isValidated ? "checkmark.circle.fill" : "checkmark.circle"
-                )
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(draft.isValidated ? AppColors.accentRed : Color.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(draft.isValidated ? AppColors.accentRed.opacity(0.12) : AppColors.primaryBlue)
-                )
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.white)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(AppColors.cardBorder, lineWidth: 1)
-        )
-    }
-
-    private func counterInputCard(
-        title: String,
-        subtitle: String,
-        value: Binding<Int>,
-        textValue: Binding<String>,
-        accent: Color
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppColors.primaryBlue)
-
-            Text(subtitle)
-                .font(.caption)
-                .foregroundStyle(AppColors.secondaryText)
-
-            HStack {
-                Button {
-                    value.wrappedValue = max(0, value.wrappedValue - 1)
-                    textValue.wrappedValue = String(value.wrappedValue)
-                } label: {
-                    Image(systemName: "minus")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(accent)
-                        .frame(width: 40, height: 40)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(accent.opacity(0.12))
-                        )
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-
-                TextField("0", text: textValue)
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.center)
-                    .font(.system(size: 28, weight: .black, design: .rounded))
-                    .foregroundStyle(accent)
-                    .frame(maxWidth: 110)
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(accent.opacity(0.08))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(accent.opacity(0.2), lineWidth: 1)
-                    )
-                    .onChange(of: textValue.wrappedValue) { _, newValue in
-                        let digits = newValue.filter(\.isNumber)
-
-                        if digits != newValue {
-                            textValue.wrappedValue = digits
-                            return
-                        }
-
-                        value.wrappedValue = Int(digits) ?? 0
-                    }
-
-                Spacer()
-
-                Button {
-                    value.wrappedValue += 1
-                    textValue.wrappedValue = String(value.wrappedValue)
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(accent)
-                        .frame(width: 40, height: 40)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(accent.opacity(0.12))
-                        )
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.top, 4)
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.white)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(AppColors.cardBorder, lineWidth: 1)
-        )
     }
 
     private func inputCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -1051,7 +1044,7 @@ struct SurtidoView: View {
 
     private func unloadAssignmentCard(_ assignment: ClientTrayAssignment, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
+            HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(assignment.productName)
                         .font(.subheadline.weight(.bold))
@@ -1075,23 +1068,9 @@ struct SurtidoView: View {
                     )
             }
 
-            HStack {
-                Label("Caducidad \(assignment.expirationLabel)", systemImage: "calendar")
-                Spacer()
-                Label("\(assignment.slotNumbers.count) productos", systemImage: "shippingbox")
-            }
-            .font(.caption)
-            .foregroundStyle(AppColors.secondaryText)
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Slots a descargar")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppColors.primaryBlue)
-
-                Text(assignment.slotNumbers.map(String.init).joined(separator: ", "))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(color)
-            }
+            Text("Slots \(assignment.slotNumbers.map(String.init).joined(separator: ", ")) • Caducidad \(assignment.expirationLabel)")
+                .font(.caption)
+                .foregroundStyle(AppColors.secondaryText)
         }
         .padding(14)
         .background(
@@ -1104,28 +1083,138 @@ struct SurtidoView: View {
         )
     }
 
+    @MainActor
+    private func generateAIGuide(for routeStop: ClientRouteStop, recommendation: UnloadRecommendation) async {
+        isGeneratingAIGuide = true
+        aiGuideStatusMessage = nil
+        aiGuideClientID = routeStop.client.id
+
+        let assignments = routeStop.trayAssignments.filter { assignment in
+            recommendation.categories.contains { $0.categoryName == assignment.categoryName }
+        }
+
+        do {
+            let result = try await UnloadGuideGenerator().generateGuide(
+                clientName: routeStop.client.name,
+                assignments: assignments,
+                recommendation: recommendation
+            )
+            aiGuideDirectives = result.directives
+            aiGuideStatusMessage = result.statusMessage
+        } catch {
+            let fallback = UnloadGuideGenerator.fallbackGuide(
+                clientName: routeStop.client.name,
+                assignments: assignments,
+                recommendation: recommendation,
+                message: "Apple Intelligence no estuvo disponible. Se muestra una guia local."
+            )
+            aiGuideDirectives = fallback.directives
+            aiGuideStatusMessage = fallback.statusMessage
+        }
+
+        isGeneratingAIGuide = false
+    }
+
+    private func speakAIGuide() {
+        guard !aiGuideDirectives.isEmpty else { return }
+
+        let script = aiGuideDirectives.enumerated().map { index, directive in
+            let prefix = directive.kind == .step ? "Paso \(index + 1)." : "Alerta."
+            return "\(prefix) \(directive.message)"
+        }
+        .joined(separator: " ")
+
+        isNarratingGuide = true
+        UnloadGuideNarrator.shared.speak(
+            text: script,
+            onFinish: {
+                isNarratingGuide = false
+            }
+        )
+    }
+
+    private func stopSpeakingAIGuide() {
+        UnloadGuideNarrator.shared.stop()
+        isNarratingGuide = false
+    }
+
+    private func aiDirectiveCard(_ directive: UnloadDirective) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label(
+                    directive.kind == .step ? "STEP" : "STOPPER",
+                    systemImage: directive.kind == .step ? "list.number" : "exclamationmark.triangle.fill"
+                )
+                .font(.caption.weight(.bold))
+                .foregroundStyle(directive.kind == .step ? AppColors.primaryBlue : AppColors.accentRed)
+
+                Spacer()
+
+                if let trayName = directive.trayName {
+                    Text(trayName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.secondaryText)
+                }
+            }
+
+            Text(directive.message)
+                .font(.subheadline)
+                .foregroundStyle(AppColors.primaryBlue)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(directive.kind == .step ? Color.white : AppColors.accentRed.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(
+                    directive.kind == .step ? AppColors.cardBorder : AppColors.accentRed.opacity(0.35),
+                    lineWidth: 1
+                )
+        )
+    }
+
+    private func unitsFromWeight(_ draft: CategoryValidationDraft) -> Int {
+        let grams = Double(draft.currentInventoryWeightText) ?? 0
+        let unitWeightGrams = draft.unitWeightKg * 1000
+        guard unitWeightGrams > 0 else { return 0 }
+        return Int(floor(grams / unitWeightGrams))
+    }
+
+    private func currentInventoryUnits(for draft: CategoryValidationDraft) -> Int {
+        switch draft.inputMode {
+        case .units:
+            return Int(draft.currentInventoryUnitsText) ?? 0
+        case .weight:
+            return unitsFromWeight(draft)
+        }
+    }
+
     private func buildUnloadRecommendation(for routeStop: ClientRouteStop) -> UnloadRecommendation {
-        let categoryRecommendations = categoryValidationDrafts
+        let categoryRecommendations = categoryDrafts
             .filter(\.isValidated)
             .map { draft in
-                let usableInventory = max(0, draft.currentInventory - draft.spoiledQuantity)
+                let currentInventory = currentInventoryUnits(for: draft)
+                let spoiled = Int(draft.spoiledQuantityText) ?? 0
+                let usableInventory = max(0, currentInventory - spoiled)
                 let targetQuantity: Int
 
                 switch draft.replenishmentMode {
                 case .targetTotal:
-                    targetQuantity = draft.targetTotal
+                    targetQuantity = Int(draft.targetTotalText) ?? 0
                 case .purchaseOnly:
-                    targetQuantity = usableInventory + draft.purchaseQuantity
+                    targetQuantity = usableInventory + (Int(draft.purchaseQuantityText) ?? 0)
                 }
 
                 let storeNeed = max(0, targetQuantity - usableInventory)
-                let demandAdjustedNeed = max(storeNeed, draft.estimatedSales + draft.spoiledQuantity)
+                let demandAdjustedNeed = max(storeNeed, draft.estimatedSales + spoiled)
                 let finalUnload = max(draft.estimatedSales, demandAdjustedNeed)
 
                 return CategoryUnloadRecommendation(
                     categoryName: draft.categoryName,
                     actualSold: draft.estimatedSales,
-                    spoiled: draft.spoiledQuantity,
+                    spoiled: spoiled,
                     usableInventory: usableInventory,
                     targetQuantity: targetQuantity,
                     mlSuggested: draft.estimatedSales,
@@ -1150,441 +1239,4 @@ struct SurtidoView: View {
             categories: categoryRecommendations
         )
     }
-}
-
-private struct DeliveryClient: Identifiable, Hashable {
-    let id: String
-    let name: String
-    let shortName: String
-    let color: Color
-    let foregroundColor: Color
-}
-
-private struct ClientSlotLoad: Identifiable {
-    let client: DeliveryClient
-    let units: Int
-
-    var id: String { client.id }
-}
-
-private enum DisembarkStep {
-    case validation
-    case unload
-}
-
-private enum ReplenishmentMode: String, CaseIterable, Identifiable {
-    case targetTotal
-    case purchaseOnly
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .targetTotal:
-            return "Tener total"
-        case .purchaseOnly:
-            return "Comprar"
-        }
-    }
-}
-
-private struct UnloadRecommendation {
-    let actualSold: Int
-    let spoiled: Int
-    let usableInventory: Int
-    let targetQuantity: Int
-    let mlSuggested: Int
-    let finalUnload: Int
-    let categories: [CategoryUnloadRecommendation]
-}
-
-private struct CategoryUnloadRecommendation: Identifiable {
-    let categoryName: String
-    let actualSold: Int
-    let spoiled: Int
-    let usableInventory: Int
-    let targetQuantity: Int
-    let mlSuggested: Int
-    let finalUnload: Int
-
-    var id: String { categoryName }
-}
-
-private struct CategoryValidationDraft: Identifiable {
-    let id = UUID()
-    let categoryName: String
-    var isValidated: Bool
-    var currentInventory: Int
-    var currentInventoryText: String
-    var spoiledQuantity: Int
-    var spoiledQuantityText: String
-    var replenishmentMode: ReplenishmentMode
-    var targetTotal: Int
-    var targetTotalText: String
-    var purchaseQuantity: Int
-    var purchaseQuantityText: String
-    var estimatedSales: Int
-}
-
-private struct ClientRouteStop: Identifiable {
-    let client: DeliveryClient
-    let totalSlots: Int
-    let totalTrayCount: Int
-    let totalWeight: Double
-    let trayAssignments: [ClientTrayAssignment]
-    let categories: [ClientCategoryRoute]
-
-    var id: String { client.id }
-}
-
-private struct ClientTrayAssignment: Identifiable {
-    let categoryName: String
-    let wallName: String
-    let shelfName: String
-    let trayName: String
-    let productName: String
-    let expirationLabel: String
-    let slotNumbers: [Int]
-
-    var id: String { "\(wallName)-\(shelfName)-\(trayName)-\(productName)" }
-}
-
-private struct ClientCategoryRoute: Identifiable {
-    let categoryName: String
-    let suggestedSlots: Int
-
-    var id: String { categoryName }
-}
-
-private struct InventoryPlan {
-    let deliveryClients: [DeliveryClient]
-    let walls: [InventoryWall]
-
-    var totalOccupiedSlots: Int {
-        walls.reduce(0) { $0 + $1.occupiedSlots }
-    }
-
-    var totalWeight: Double {
-        walls.reduce(0) { $0 + $1.totalWeight }
-    }
-
-    var clientRoute: [ClientRouteStop] {
-        deliveryClients.compactMap { client in
-            let assignments = clientAssignments(for: client)
-            guard !assignments.isEmpty else { return nil }
-
-            let totalSlots = assignments.reduce(0) { $0 + $1.slotNumbers.count }
-            let totalTrayCount = assignments.count
-            let totalWeight = walls.reduce(0.0) { partial, wall in
-                partial + wall.shelves.reduce(0.0) { shelfPartial, shelf in
-                    shelfPartial + shelf.trays.reduce(0.0) { trayPartial, tray in
-                        let count = tray.slots.filter { $0.client?.id == client.id }.count
-                        return trayPartial + (Double(count) * tray.unitWeight)
-                    }
-                }
-            }
-            let categories = Dictionary(grouping: assignments, by: \.categoryName)
-                .map { categoryName, values in
-                    ClientCategoryRoute(
-                        categoryName: categoryName,
-                        suggestedSlots: values.reduce(0) { $0 + $1.slotNumbers.count }
-                    )
-                }
-                .sorted { $0.categoryName < $1.categoryName }
-
-            return ClientRouteStop(
-                client: client,
-                totalSlots: totalSlots,
-                totalTrayCount: totalTrayCount,
-                totalWeight: totalWeight,
-                trayAssignments: assignments,
-                categories: categories
-            )
-        }
-        .sorted { lhs, rhs in
-            if lhs.totalSlots != rhs.totalSlots {
-                return lhs.totalSlots > rhs.totalSlots
-            }
-
-            return lhs.client.name < rhs.client.name
-        }
-    }
-
-    static func make(clients: [Client], predictor: ClientOrderPredictor) -> InventoryPlan {
-        let mappedClients = clients.prefix(4).enumerated().map { index, client in
-            DeliveryClient(
-                id: client.id,
-                name: client.name,
-                shortName: shortName(for: client.name),
-                color: palette[index].fill,
-                foregroundColor: palette[index].foreground
-            )
-        }
-
-        let trayTemplates = trayTemplateCatalog
-        let slotForecasts = mappedClients.flatMap { deliveryClient in
-            guard let client = clients.first(where: { $0.id == deliveryClient.id }) else {
-                return [ForecastLoad]()
-            }
-
-            return predictor.predictions(for: client).compactMap { prediction in
-                guard let template = trayTemplates.first(where: { $0.categoryName == prediction.categoryName }) else {
-                    return nil
-                }
-
-                let slotCount = max(1, Int(ceil(prediction.predictedNextOrder / template.unitsPerSlot)))
-                return ForecastLoad(
-                    client: deliveryClient,
-                    categoryName: prediction.categoryName,
-                    productName: template.productName,
-                    expirationLabel: template.expirationLabel,
-                    unitWeight: template.unitWeight,
-                    slotCount: slotCount
-                )
-            }
-        }
-
-        let trays = buildTrays(from: slotForecasts)
-        let shelves = buildShelves(from: trays)
-        let walls = buildWalls(from: shelves)
-
-        return InventoryPlan(deliveryClients: mappedClients, walls: walls)
-    }
-
-    private func clientAssignments(for client: DeliveryClient) -> [ClientTrayAssignment] {
-        walls.flatMap { wall in
-            wall.shelves.flatMap { shelf in
-                shelf.trays.compactMap { tray in
-                    let slots = tray.slots.filter { $0.client?.id == client.id }.map(\.number)
-                    guard !slots.isEmpty else { return nil }
-
-                    return ClientTrayAssignment(
-                        categoryName: tray.categoryName,
-                        wallName: wall.name,
-                        shelfName: shelf.name,
-                        trayName: tray.name,
-                        productName: tray.productName,
-                        expirationLabel: tray.expirationLabel,
-                        slotNumbers: slots
-                    )
-                }
-            }
-        }
-    }
-
-    private static func buildTrays(from forecasts: [ForecastLoad]) -> [InventoryTray] {
-        var trays: [InventoryTray] = []
-        var trayNumber = 1
-
-        for forecast in forecasts.sorted(by: { lhs, rhs in
-            if lhs.categoryName != rhs.categoryName {
-                return lhs.categoryName < rhs.categoryName
-            }
-
-            if lhs.client.name != rhs.client.name {
-                return lhs.client.name < rhs.client.name
-            }
-
-            return lhs.productName < rhs.productName
-        }) {
-            var remainingSlots = forecast.slotCount
-
-            while remainingSlots > 0 {
-                let occupiedCount = min(10, remainingSlots)
-                let slots = (1...10).map { slotNumber in
-                    InventorySlot(
-                        number: slotNumber,
-                        client: slotNumber <= occupiedCount ? forecast.client : nil
-                    )
-                }
-
-                trays.append(
-                    InventoryTray(
-                        name: "Bandeja \(trayNumber)",
-                        productName: forecast.productName,
-                        categoryName: forecast.categoryName,
-                        expirationLabel: forecast.expirationLabel,
-                        unitWeight: forecast.unitWeight,
-                        slots: slots
-                    )
-                )
-
-                trayNumber += 1
-                remainingSlots -= occupiedCount
-            }
-        }
-
-        return trays
-    }
-
-    private static func buildShelves(from trays: [InventoryTray]) -> [InventoryShelf] {
-        let shelvesNeeded = max(6, Int(ceil(Double(trays.count) / 10.0)))
-        let shelfNames = (1...shelvesNeeded).map { "Anaquel \($0)" }
-
-        return shelfNames.enumerated().map { index, shelfName in
-            let start = index * 10
-            let end = min(start + 10, trays.count)
-            let shelfTrays = start < end ? Array(trays[start..<end]) : []
-            return InventoryShelf(name: shelfName, trays: shelfTrays)
-        }
-    }
-
-    private static func buildWalls(from shelves: [InventoryShelf]) -> [InventoryWall] {
-        let wallNames = ["Pared izquierda", "Pared frontal", "Pared derecha"]
-        let perWall = Int(ceil(Double(shelves.count) / Double(wallNames.count)))
-
-        return wallNames.enumerated().map { index, name in
-            let start = index * perWall
-            let end = min(start + perWall, shelves.count)
-            let wallShelves = start < end ? Array(shelves[start..<end]) : []
-            return InventoryWall(name: name, shelves: wallShelves)
-        }
-    }
-
-    private static func shortName(for name: String) -> String {
-        let parts = name.split(separator: " ")
-        let initials = parts.prefix(2).compactMap { $0.first }.map(String.init).joined()
-        return initials.isEmpty ? "CL" : initials
-    }
-
-    private static let palette: [(fill: Color, foreground: Color)] = [
-        (
-            fill: Color(red: 0.10, green: 0.56, blue: 0.98),
-            foreground: Color(red: 0.05, green: 0.27, blue: 0.53)
-        ),
-        (
-            fill: Color(red: 0.14, green: 0.71, blue: 0.42),
-            foreground: Color(red: 0.05, green: 0.34, blue: 0.20)
-        ),
-        (
-            fill: Color(red: 0.98, green: 0.68, blue: 0.16),
-            foreground: Color(red: 0.51, green: 0.29, blue: 0.00)
-        ),
-        (
-            fill: Color(red: 0.80, green: 0.35, blue: 0.85),
-            foreground: Color(red: 0.39, green: 0.11, blue: 0.44)
-        )
-    ]
-
-    private static let trayTemplateCatalog: [TrayTemplate] = [
-        TrayTemplate(
-            categoryName: "Pan de caja fresco y congelado",
-            productName: "Pan Blanco Grande",
-            expirationLabel: "14 May 2026",
-            unitWeight: 0.68,
-            unitsPerSlot: 40
-        ),
-        TrayTemplate(
-            categoryName: "Bollos, English muffins y bagels",
-            productName: "Bollos Clasicos",
-            expirationLabel: "16 May 2026",
-            unitWeight: 0.54,
-            unitsPerSlot: 24
-        ),
-        TrayTemplate(
-            categoryName: "Botanas saladas",
-            productName: "Botana Horneada",
-            expirationLabel: "22 May 2026",
-            unitWeight: 0.22,
-            unitsPerSlot: 18
-        ),
-        TrayTemplate(
-            categoryName: "Galletas",
-            productName: "Galletas Avena",
-            expirationLabel: "19 May 2026",
-            unitWeight: 0.26,
-            unitsPerSlot: 16
-        )
-    ]
-}
-
-private struct ForecastLoad {
-    let client: DeliveryClient
-    let categoryName: String
-    let productName: String
-    let expirationLabel: String
-    let unitWeight: Double
-    let slotCount: Int
-}
-
-private struct TrayTemplate {
-    let categoryName: String
-    let productName: String
-    let expirationLabel: String
-    let unitWeight: Double
-    let unitsPerSlot: Double
-}
-
-private struct InventoryWall: Identifiable {
-    let id = UUID()
-    let name: String
-    let shelves: [InventoryShelf]
-
-    var occupiedSlots: Int {
-        shelves.reduce(0) { $0 + $1.occupiedSlots }
-    }
-
-    var totalWeight: Double {
-        shelves.reduce(0) { $0 + $1.totalWeight }
-    }
-}
-
-private struct InventoryShelf: Identifiable {
-    let id = UUID()
-    let name: String
-    let trays: [InventoryTray]
-
-    var occupiedSlots: Int {
-        trays.reduce(0) { $0 + $1.occupiedSlots }
-    }
-
-    var totalWeight: Double {
-        trays.reduce(0) { $0 + $1.totalWeight }
-    }
-
-    func deliveryCounts(clients: [DeliveryClient]) -> [ClientSlotLoad] {
-        clients.map { client in
-            ClientSlotLoad(
-                client: client,
-                units: trays.reduce(0) { partial, tray in
-                    partial + tray.slots.filter { $0.client?.id == client.id }.count
-                }
-            )
-        }
-        .filter { $0.units > 0 }
-    }
-}
-
-private struct InventoryTray: Identifiable {
-    let id = UUID()
-    let name: String
-    let productName: String
-    let categoryName: String
-    let expirationLabel: String
-    let unitWeight: Double
-    let slots: [InventorySlot]
-
-    var occupiedSlots: Int {
-        slots.filter { $0.client != nil }.count
-    }
-
-    var totalWeight: Double {
-        Double(occupiedSlots) * unitWeight
-    }
-
-    func deliveryCounts(clients: [DeliveryClient]) -> [ClientSlotLoad] {
-        clients.map { client in
-            ClientSlotLoad(
-                client: client,
-                units: slots.filter { $0.client?.id == client.id }.count
-            )
-        }
-        .filter { $0.units > 0 }
-    }
-}
-
-private struct InventorySlot: Identifiable {
-    let id = UUID()
-    let number: Int
-    let client: DeliveryClient?
 }
