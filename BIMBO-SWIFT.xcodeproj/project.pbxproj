@@ -269,13 +269,10 @@
 				DEVELOPMENT_TEAM = 36FT23229F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-<<<<<<< Updated upstream
 				INFOPLIST_FILE = "BIMBO-SWIFT/Info.plist";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "\"Location\"";
-=======
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "BIMBO SWIFT uses the microphone to capture spoken validation values for category, current pieces, spoiled products, and client target.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "BIMBO SWIFT uses speech recognition to convert spoken validation data into category, current pieces, spoiled products, and client target fields.";
->>>>>>> Stashed changes
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -308,13 +305,10 @@
 				DEVELOPMENT_TEAM = 36FT23229F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-<<<<<<< Updated upstream
 				INFOPLIST_FILE = "BIMBO-SWIFT/Info.plist";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "\"Location\"";
-=======
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "BIMBO SWIFT uses the microphone to capture spoken validation values for category, current pieces, spoiled products, and client target.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "BIMBO SWIFT uses speech recognition to convert spoken validation data into category, current pieces, spoiled products, and client target fields.";
->>>>>>> Stashed changes
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
