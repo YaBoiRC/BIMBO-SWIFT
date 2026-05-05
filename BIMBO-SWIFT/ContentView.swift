@@ -1,21 +1,16 @@
-//
-//  ContentView.swift
-//  BIMBO-SWIFT
-//
-//  Created by Raymond Chavez on 04/05/26.
-//
-
 import SwiftUI
 
 struct ContentView: View {
+    private let clients = ClientRepository.sampleClients
+
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        TabView {
+            DashboardView(clients: clients)
+            ClientsListView(clients: clients)
+            CategoriesView(categories: ClientRepository.categories)
+            SettingsView()
         }
-        .padding()
+        .tint(AppColors.primaryBlue)
     }
 }
 
