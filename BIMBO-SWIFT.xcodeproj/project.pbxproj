@@ -10,9 +10,22 @@
 		3957E7E42FA98BA300C00C2C /* BIMBO-SWIFT.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "BIMBO-SWIFT.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		FB6BABFA2FAA9F2200673751 /* Exceptions for "BIMBO-SWIFT" folder in "BIMBO-SWIFT" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 3957E7E32FA98BA300C00C2C /* BIMBO-SWIFT */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		3957E7E62FA98BA300C00C2C /* BIMBO-SWIFT */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				FB6BABFA2FAA9F2200673751 /* Exceptions for "BIMBO-SWIFT" folder in "BIMBO-SWIFT" target */,
+			);
 			path = "BIMBO-SWIFT";
 			sourceTree = "<group>";
 		};
@@ -256,6 +269,8 @@
 				DEVELOPMENT_TEAM = 36FT23229F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "BIMBO-SWIFT/Info.plist";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "\"Location\"";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -288,6 +303,8 @@
 				DEVELOPMENT_TEAM = 36FT23229F;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "BIMBO-SWIFT/Info.plist";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "\"Location\"";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

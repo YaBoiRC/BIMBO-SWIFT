@@ -5,13 +5,18 @@ import SwiftUI
 
 struct MapSectionView: View {
     let clients: [Client]
+    var simulatedStart: CLLocationCoordinate2D? = nil
 
     @State private var position: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var locationManager = LocationManager()
     @State private var routeSegments: [MKRoute] = []
 
+    private var startLocation: CLLocationCoordinate2D? {
+        simulatedStart ?? locationManager.currentLocation
+    }
+
     private var orderedClients: [Client] {
-        guard let currentLocation = locationManager.currentLocation else { return clients }
+        guard let currentLocation = startLocation else { return clients }
 
         var remainingClients = clients
         var sortedClients: [Client] = []
@@ -89,7 +94,7 @@ struct MapSectionView: View {
             .map { "\($0.id):\($0.latitude),\($0.longitude)" }
             .joined(separator: "|")
         let origin: String
-        if let currentLocation = locationManager.currentLocation {
+        if let currentLocation = startLocation {
             origin = "\(currentLocation.latitude),\(currentLocation.longitude)"
         } else {
             origin = "unknown-origin"
@@ -100,7 +105,7 @@ struct MapSectionView: View {
 
     @MainActor
     private func updateRoutes() async {
-        guard let currentLocation = locationManager.currentLocation, !orderedClients.isEmpty else { return }
+        guard let currentLocation = startLocation, !orderedClients.isEmpty else { return }
 
         var routes: [MKRoute] = []
         var previousStop = currentLocation
@@ -194,5 +199,8 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
 }
 
 #Preview {
-    MapSectionView(clients: ClientRepository.sampleClients)
+    MapSectionView(
+        clients: ClientRepository.sampleClients,
+        simulatedStart: CLLocationCoordinate2D(latitude: 19.4400, longitude: -99.1500)
+    )
 }
