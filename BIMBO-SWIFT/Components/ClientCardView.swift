@@ -45,12 +45,30 @@ struct ClientCardView: View {
                 Divider()
                     .overlay(AppColors.cardBorder.opacity(0.9))
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Categories")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Top Products")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppColors.primaryBlue)
 
-                    FlexibleTagListView(items: client.categories)
+                    if topProducts.isEmpty {
+                        Text("No order history")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.secondaryText)
+                    } else {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(Array(topProducts.enumerated()), id: \.offset) { index, name in
+                                HStack(spacing: 6) {
+                                    Text("\(index + 1).")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(AppColors.primaryBlue)
+                                        .frame(width: 14, alignment: .leading)
+                                    Text(name)
+                                        .font(.caption)
+                                        .foregroundStyle(AppColors.secondaryText)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -83,6 +101,19 @@ struct ClientCardView: View {
         .shadow(color: AppColors.primaryBlue.opacity(0.08), radius: 18, x: 0, y: 10)
     }
 
+    private var topProducts: [String] {
+        var totals: [String: Int] = [:]
+        for order in client.orderHistory {
+            for item in order.items {
+                totals[item.product.name, default: 0] += item.quantity
+            }
+        }
+        return totals
+            .sorted { $0.value > $1.value }
+            .prefix(3)
+            .map(\.key)
+    }
+
     private var metricPanel: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Average weekly units")
@@ -98,10 +129,6 @@ struct ClientCardView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AppColors.secondaryText)
             }
-
-            Text("Current average demand across this account.")
-                .font(.footnote)
-                .foregroundStyle(AppColors.secondaryText)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)

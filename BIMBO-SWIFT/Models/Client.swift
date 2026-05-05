@@ -3,10 +3,15 @@ import Foundation
 struct Client: Identifiable {
     let id: String
     let name: String
-    let weeklyPurchaseAverage: Double
     let rating: Int
-    let categories: [String]
     let categoryPurchaseHistory: [CategoryPurchaseHistory]
+    let orderHistory: [Order]
+
+    var weeklyPurchaseAverage: Double {
+        categoryPurchaseHistory.reduce(0) { $0 + $1.currentWeeklyAverage }
+    }
+    
+    let categories: [String]
 }
 
 struct CategoryPurchaseHistory: Identifiable {
