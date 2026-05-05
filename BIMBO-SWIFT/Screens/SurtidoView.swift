@@ -12,6 +12,11 @@ struct SurtidoView: View {
     @State private var validationStep: ValidationStep = .validate
     @State private var categoryDrafts: [CategoryValidationDraft] = []
     @State private var selectedCategoryDraftID: UUID?
+    @State private var aiGuideDirectives: [UnloadDirective] = []
+    @State private var aiGuideStatusMessage: String?
+    @State private var isGeneratingAIGuide = false
+    @State private var aiGuideClientID: String?
+    @State private var isNarratingGuide = false
 
     init() {
         let clients = ClientRepository.sampleClients
@@ -523,6 +528,9 @@ struct SurtidoView: View {
     private func startValidationWorkflow() {
         currentClientRouteIndex = 0
         validationStep = .validate
+        aiGuideDirectives = []
+        aiGuideStatusMessage = nil
+        aiGuideClientID = nil
         if let routeStop = activeRouteStop {
             configureDrafts(for: routeStop)
         }
@@ -732,11 +740,13 @@ struct SurtidoView: View {
                 }
             }
 
-            numericTextField(
-                title: "Producto echado a perder",
-                text: $categoryDrafts[index].spoiledQuantityText,
-                prompt: "Ej. 3"
-            )
+            inputCard {
+                numericTextField(
+                    title: "Producto echado a perder",
+                    text: $categoryDrafts[index].spoiledQuantityText,
+                    prompt: "Ej. 3"
+                )
+            }
 
             inputCard {
                 Text("Objetivo del cliente")
@@ -848,6 +858,95 @@ struct SurtidoView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AppColors.primaryBlue)
 
+                inputCard {
+                    Text("Asistente AI de desembarque")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppColors.primaryBlue)
+
+                    Text("Genera una guia paso a paso con steps y stopers basada en estas bandejas.")
+                        .font(.caption)
+                        .foregroundStyle(AppColors.secondaryText)
+
+                    Button {
+                        Task {
+                            await generateAIGuide(for: routeStop, recommendation: recommendation)
+                        }
+                    } label: {
+                        HStack {
+                            if isGeneratingAIGuide {
+                                ProgressView()
+                                    .tint(.white)
+                            }
+
+                            Text(isGeneratingAIGuide ? "Generando guia..." : "Generar guia AI")
+                                .font(.headline.weight(.bold))
+                        }
+                        .foregroundStyle(Color.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(isGeneratingAIGuide ? AppColors.cardBorder : AppColors.primaryBlue)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isGeneratingAIGuide)
+
+                    if let aiGuideStatusMessage {
+                        Text(aiGuideStatusMessage)
+                            .font(.caption)
+                            .foregroundStyle(AppColors.secondaryText)
+                    }
+
+                    if aiGuideClientID == routeStop.client.id, !aiGuideDirectives.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 10) {
+                                Button {
+                                    speakAIGuide()
+                                } label: {
+                                    Label(
+                                        isNarratingGuide ? "Reproduciendo..." : "Narrar pasos",
+                                        systemImage: "speaker.wave.2.fill"
+                                    )
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(Color.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                            .fill(isNarratingGuide ? AppColors.cardBorder : AppColors.accentRed)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(isNarratingGuide)
+
+                                Button {
+                                    stopSpeakingAIGuide()
+                                } label: {
+                                    Label("Detener voz", systemImage: "stop.fill")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(AppColors.primaryBlue)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                                .fill(Color.white)
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                                .stroke(AppColors.cardBorder, lineWidth: 1)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            ForEach(aiGuideDirectives) { directive in
+                                aiDirectiveCard(directive)
+                            }
+                        }
+                    }
+                }
+
                 ForEach(routeStop.trayAssignments.filter { assignment in
                     recommendation.categories.contains { $0.categoryName == assignment.categoryName }
                 }) { assignment in
@@ -897,6 +996,9 @@ struct SurtidoView: View {
         if currentClientRouteIndex + 1 < routeStops.count {
             currentClientRouteIndex += 1
             validationStep = .validate
+            aiGuideDirectives = []
+            aiGuideStatusMessage = nil
+            aiGuideClientID = nil
             if let routeStop = activeRouteStop {
                 configureDrafts(for: routeStop)
             }
@@ -977,6 +1079,98 @@ struct SurtidoView: View {
         )
     }
 
+    @MainActor
+    private func generateAIGuide(for routeStop: ClientRouteStop, recommendation: UnloadRecommendation) async {
+        isGeneratingAIGuide = true
+        aiGuideStatusMessage = nil
+        aiGuideClientID = routeStop.client.id
+
+        let assignments = routeStop.trayAssignments.filter { assignment in
+            recommendation.categories.contains { $0.categoryName == assignment.categoryName }
+        }
+
+        do {
+            let result = try await UnloadGuideGenerator().generateGuide(
+                clientName: routeStop.client.name,
+                assignments: assignments,
+                recommendation: recommendation
+            )
+            aiGuideDirectives = result.directives
+            aiGuideStatusMessage = result.statusMessage
+        } catch {
+            let fallback = UnloadGuideGenerator.fallbackGuide(
+                clientName: routeStop.client.name,
+                assignments: assignments,
+                recommendation: recommendation,
+                message: "Apple Intelligence no estuvo disponible. Se muestra una guia local."
+            )
+            aiGuideDirectives = fallback.directives
+            aiGuideStatusMessage = fallback.statusMessage
+        }
+
+        isGeneratingAIGuide = false
+    }
+
+    private func speakAIGuide() {
+        guard !aiGuideDirectives.isEmpty else { return }
+
+        let script = aiGuideDirectives.enumerated().map { index, directive in
+            let prefix = directive.kind == .step ? "Paso \(index + 1)." : "Alerta."
+            return "\(prefix) \(directive.message)"
+        }
+        .joined(separator: " ")
+
+        isNarratingGuide = true
+        UnloadGuideNarrator.shared.speak(
+            text: script,
+            onFinish: {
+                isNarratingGuide = false
+            }
+        )
+    }
+
+    private func stopSpeakingAIGuide() {
+        UnloadGuideNarrator.shared.stop()
+        isNarratingGuide = false
+    }
+
+    private func aiDirectiveCard(_ directive: UnloadDirective) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label(
+                    directive.kind == .step ? "STEP" : "STOPPER",
+                    systemImage: directive.kind == .step ? "list.number" : "exclamationmark.triangle.fill"
+                )
+                .font(.caption.weight(.bold))
+                .foregroundStyle(directive.kind == .step ? AppColors.primaryBlue : AppColors.accentRed)
+
+                Spacer()
+
+                if let trayName = directive.trayName {
+                    Text(trayName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppColors.secondaryText)
+                }
+            }
+
+            Text(directive.message)
+                .font(.subheadline)
+                .foregroundStyle(AppColors.primaryBlue)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(directive.kind == .step ? Color.white : AppColors.accentRed.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(
+                    directive.kind == .step ? AppColors.cardBorder : AppColors.accentRed.opacity(0.35),
+                    lineWidth: 1
+                )
+        )
+    }
+
     private func unitsFromWeight(_ draft: CategoryValidationDraft) -> Int {
         let grams = Double(draft.currentInventoryWeightText) ?? 0
         let unitWeightGrams = draft.unitWeightKg * 1000
@@ -1041,413 +1235,4 @@ struct SurtidoView: View {
             categories: categoryRecommendations
         )
     }
-}
-
-private enum ValidationStep {
-    case validate
-    case unload
-}
-
-private enum ReplenishmentMode: String, CaseIterable, Identifiable {
-    case targetTotal
-    case purchaseOnly
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .targetTotal: return "Tener total"
-        case .purchaseOnly: return "Comprar"
-        }
-    }
-}
-
-private enum InventoryInputMode: String, CaseIterable, Identifiable {
-    case units
-    case weight
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .units: return "Piezas"
-        case .weight: return "Peso"
-        }
-    }
-}
-
-private struct DeliveryClient: Identifiable, Hashable {
-    let id: String
-    let name: String
-    let shortName: String
-    let color: Color
-    let foregroundColor: Color
-}
-
-private struct ClientSlotLoad: Identifiable {
-    let client: DeliveryClient
-    let units: Int
-
-    var id: String { client.id }
-}
-
-private struct CategoryValidationDraft: Identifiable {
-    let id = UUID()
-    let categoryName: String
-    let productName: String
-    let unitWeightKg: Double
-    let estimatedSales: Int
-    var inputMode: InventoryInputMode
-    var currentInventoryUnitsText: String
-    var currentInventoryWeightText: String
-    var spoiledQuantityText: String
-    var replenishmentMode: ReplenishmentMode
-    var targetTotalText: String
-    var purchaseQuantityText: String
-    var isValidated: Bool
-}
-
-private struct UnloadRecommendation {
-    let actualSold: Int
-    let spoiled: Int
-    let usableInventory: Int
-    let targetQuantity: Int
-    let mlSuggested: Int
-    let finalUnload: Int
-    let categories: [CategoryUnloadRecommendation]
-}
-
-private struct CategoryUnloadRecommendation: Identifiable {
-    let categoryName: String
-    let actualSold: Int
-    let spoiled: Int
-    let usableInventory: Int
-    let targetQuantity: Int
-    let mlSuggested: Int
-    let finalUnload: Int
-
-    var id: String { categoryName }
-}
-
-private struct ClientRouteStop: Identifiable {
-    let client: DeliveryClient
-    let totalSlots: Int
-    let totalTrayCount: Int
-    let totalWeight: Double
-    let trayAssignments: [ClientTrayAssignment]
-    let categories: [ClientCategoryRoute]
-
-    var id: String { client.id }
-}
-
-private struct ClientCategoryRoute: Identifiable {
-    let categoryName: String
-    let productName: String
-    let unitWeightKg: Double
-    let suggestedSlots: Int
-
-    var id: String { categoryName }
-}
-
-private struct ClientTrayAssignment: Identifiable {
-    let categoryName: String
-    let wallName: String
-    let shelfName: String
-    let trayName: String
-    let productName: String
-    let expirationLabel: String
-    let slotNumbers: [Int]
-
-    var id: String { "\(wallName)-\(shelfName)-\(trayName)-\(productName)" }
-}
-
-private struct InventoryPlan {
-    let deliveryClients: [DeliveryClient]
-    let walls: [InventoryWall]
-
-    var totalOccupiedSlots: Int {
-        walls.reduce(0) { $0 + $1.occupiedSlots }
-    }
-
-    var totalWeight: Double {
-        walls.reduce(0) { $0 + $1.totalWeight }
-    }
-
-    var clientRoute: [ClientRouteStop] {
-        deliveryClients.compactMap { client in
-            let assignments = clientAssignments(for: client)
-            guard !assignments.isEmpty else { return nil }
-
-            let totalSlots = assignments.reduce(0) { $0 + $1.slotNumbers.count }
-            let totalTrayCount = assignments.count
-            let totalWeight = walls.reduce(0.0) { partial, wall in
-                partial + wall.shelves.reduce(0.0) { shelfPartial, shelf in
-                    shelfPartial + shelf.trays.reduce(0.0) { trayPartial, tray in
-                        let count = tray.slots.filter { $0.client?.id == client.id }.count
-                        return trayPartial + (Double(count) * tray.unitWeight)
-                    }
-                }
-            }
-            let categories = Dictionary(grouping: assignments, by: \.categoryName)
-                .compactMap { categoryName, values -> ClientCategoryRoute? in
-                    guard let first = values.first else { return nil }
-                    return ClientCategoryRoute(
-                        categoryName: categoryName,
-                        productName: first.productName,
-                        unitWeightKg: first.unitWeightKg,
-                        suggestedSlots: values.reduce(0) { $0 + $1.slotNumbers.count }
-                    )
-                }
-                .sorted { $0.categoryName < $1.categoryName }
-
-            return ClientRouteStop(
-                client: client,
-                totalSlots: totalSlots,
-                totalTrayCount: totalTrayCount,
-                totalWeight: totalWeight,
-                trayAssignments: assignments,
-                categories: categories
-            )
-        }
-        .sorted { lhs, rhs in
-            if lhs.totalSlots != rhs.totalSlots {
-                return lhs.totalSlots > rhs.totalSlots
-            }
-            return lhs.client.name < rhs.client.name
-        }
-    }
-
-    static func make(clients: [Client], predictor: ClientOrderPredictor) -> InventoryPlan {
-        let mappedClients = clients.prefix(4).enumerated().map { index, client in
-            DeliveryClient(
-                id: client.id,
-                name: client.name,
-                shortName: shortName(for: client.name),
-                color: palette[index].fill,
-                foregroundColor: palette[index].foreground
-            )
-        }
-
-        let trayTemplates = trayTemplateCatalog
-        let slotForecasts = mappedClients.flatMap { deliveryClient in
-            guard let client = clients.first(where: { $0.id == deliveryClient.id }) else {
-                return [ForecastLoad]()
-            }
-
-            return predictor.predictions(for: client).compactMap { prediction in
-                guard let template = trayTemplates.first(where: { $0.categoryName == prediction.categoryName }) else {
-                    return nil
-                }
-
-                let slotCount = max(1, Int(ceil(prediction.predictedNextOrder / template.unitsPerSlot)))
-                return ForecastLoad(
-                    client: deliveryClient,
-                    categoryName: prediction.categoryName,
-                    productName: template.productName,
-                    expirationLabel: template.expirationLabel,
-                    unitWeight: template.unitWeight,
-                    slotCount: slotCount
-                )
-            }
-        }
-
-        let trays = buildTrays(from: slotForecasts)
-        let shelves = buildShelves(from: trays)
-        let walls = buildWalls(from: shelves)
-
-        return InventoryPlan(deliveryClients: mappedClients, walls: walls)
-    }
-
-    private func clientAssignments(for client: DeliveryClient) -> [ClientTrayAssignment] {
-        walls.flatMap { wall in
-            wall.shelves.flatMap { shelf in
-                shelf.trays.compactMap { tray in
-                    let slots = tray.slots.filter { $0.client?.id == client.id }.map(\.number)
-                    guard !slots.isEmpty else { return nil }
-
-                    return ClientTrayAssignment(
-                        categoryName: tray.categoryName,
-                        wallName: wall.name,
-                        shelfName: shelf.name,
-                        trayName: tray.name,
-                        productName: tray.productName,
-                        expirationLabel: tray.expirationLabel,
-                        slotNumbers: slots
-                    )
-                }
-            }
-        }
-    }
-
-    private static func buildTrays(from forecasts: [ForecastLoad]) -> [InventoryTray] {
-        var trays: [InventoryTray] = []
-        var trayNumber = 1
-
-        for forecast in forecasts.sorted(by: { lhs, rhs in
-            if lhs.categoryName != rhs.categoryName {
-                return lhs.categoryName < rhs.categoryName
-            }
-            if lhs.client.name != rhs.client.name {
-                return lhs.client.name < rhs.client.name
-            }
-            return lhs.productName < rhs.productName
-        }) {
-            var remainingSlots = forecast.slotCount
-
-            while remainingSlots > 0 {
-                let occupiedCount = min(10, remainingSlots)
-                let slots = (1...10).map { slotNumber in
-                    InventorySlot(number: slotNumber, client: slotNumber <= occupiedCount ? forecast.client : nil)
-                }
-
-                trays.append(
-                    InventoryTray(
-                        name: "Bandeja \(trayNumber)",
-                        productName: forecast.productName,
-                        categoryName: forecast.categoryName,
-                        expirationLabel: forecast.expirationLabel,
-                        unitWeight: forecast.unitWeight,
-                        slots: slots
-                    )
-                )
-
-                trayNumber += 1
-                remainingSlots -= occupiedCount
-            }
-        }
-
-        return trays
-    }
-
-    private static func buildShelves(from trays: [InventoryTray]) -> [InventoryShelf] {
-        let shelvesNeeded = max(6, Int(ceil(Double(trays.count) / 10.0)))
-        let shelfNames = (1...shelvesNeeded).map { "Anaquel \($0)" }
-
-        return shelfNames.enumerated().map { index, shelfName in
-            let start = index * 10
-            let end = min(start + 10, trays.count)
-            let shelfTrays = start < end ? Array(trays[start..<end]) : []
-            return InventoryShelf(name: shelfName, trays: shelfTrays)
-        }
-    }
-
-    private static func buildWalls(from shelves: [InventoryShelf]) -> [InventoryWall] {
-        let wallNames = ["Pared izquierda", "Pared frontal", "Pared derecha"]
-        let perWall = Int(ceil(Double(shelves.count) / Double(wallNames.count)))
-
-        return wallNames.enumerated().map { index, name in
-            let start = index * perWall
-            let end = min(start + perWall, shelves.count)
-            let wallShelves = start < end ? Array(shelves[start..<end]) : []
-            return InventoryWall(name: name, shelves: wallShelves)
-        }
-    }
-
-    private static func shortName(for name: String) -> String {
-        let parts = name.split(separator: " ")
-        let initials = parts.prefix(2).compactMap { $0.first }.map(String.init).joined()
-        return initials.isEmpty ? "CL" : initials
-    }
-
-    private static let palette: [(fill: Color, foreground: Color)] = [
-        (fill: Color(red: 0.10, green: 0.56, blue: 0.98), foreground: Color(red: 0.05, green: 0.27, blue: 0.53)),
-        (fill: Color(red: 0.14, green: 0.71, blue: 0.42), foreground: Color(red: 0.05, green: 0.34, blue: 0.20)),
-        (fill: Color(red: 0.98, green: 0.68, blue: 0.16), foreground: Color(red: 0.51, green: 0.29, blue: 0.00)),
-        (fill: Color(red: 0.80, green: 0.35, blue: 0.85), foreground: Color(red: 0.39, green: 0.11, blue: 0.44))
-    ]
-
-    private static let trayTemplateCatalog: [TrayTemplate] = [
-        TrayTemplate(categoryName: "Pan de caja fresco y congelado", productName: "Pan Blanco Grande", expirationLabel: "14 May 2026", unitWeight: 0.68, unitsPerSlot: 40),
-        TrayTemplate(categoryName: "Bollos, English muffins y bagels", productName: "Bollos Clasicos", expirationLabel: "16 May 2026", unitWeight: 0.05, unitsPerSlot: 24),
-        TrayTemplate(categoryName: "Botanas saladas", productName: "Botana Horneada", expirationLabel: "22 May 2026", unitWeight: 0.08, unitsPerSlot: 18),
-        TrayTemplate(categoryName: "Galletas", productName: "Galletas Avena", expirationLabel: "19 May 2026", unitWeight: 0.026, unitsPerSlot: 16)
-    ]
-}
-
-private struct ForecastLoad {
-    let client: DeliveryClient
-    let categoryName: String
-    let productName: String
-    let expirationLabel: String
-    let unitWeight: Double
-    let slotCount: Int
-}
-
-private struct TrayTemplate {
-    let categoryName: String
-    let productName: String
-    let expirationLabel: String
-    let unitWeight: Double
-    let unitsPerSlot: Double
-}
-
-private struct InventoryWall: Identifiable {
-    let id = UUID()
-    let name: String
-    let shelves: [InventoryShelf]
-
-    var occupiedSlots: Int {
-        shelves.reduce(0) { $0 + $1.occupiedSlots }
-    }
-
-    var totalWeight: Double {
-        shelves.reduce(0) { $0 + $1.totalWeight }
-    }
-}
-
-private struct InventoryShelf: Identifiable {
-    let id = UUID()
-    let name: String
-    let trays: [InventoryTray]
-
-    var occupiedSlots: Int {
-        trays.reduce(0) { $0 + $1.occupiedSlots }
-    }
-
-    var totalWeight: Double {
-        trays.reduce(0) { $0 + $1.totalWeight }
-    }
-
-    func deliveryCounts(clients: [DeliveryClient]) -> [ClientSlotLoad] {
-        clients.map { client in
-            ClientSlotLoad(
-                client: client,
-                units: trays.reduce(0) { partial, tray in
-                    partial + tray.slots.filter { $0.client?.id == client.id }.count
-                }
-            )
-        }
-        .filter { $0.units > 0 }
-    }
-}
-
-private struct InventoryTray: Identifiable {
-    let id = UUID()
-    let name: String
-    let productName: String
-    let categoryName: String
-    let expirationLabel: String
-    let unitWeight: Double
-    let slots: [InventorySlot]
-
-    var occupiedSlots: Int {
-        slots.filter { $0.client != nil }.count
-    }
-
-    var totalWeight: Double {
-        Double(occupiedSlots) * unitWeight
-    }
-
-    func deliveryCounts(clients: [DeliveryClient]) -> [ClientSlotLoad] {
-        clients.map { client in
-            ClientSlotLoad(client: client, units: slots.filter { $0.client?.id == client.id }.count)
-        }
-        .filter { $0.units > 0 }
-    }
-}
-
-private struct InventorySlot: Identifiable {
-    let id = UUID()
-    let number: Int
-    let client: DeliveryClient?
 }
