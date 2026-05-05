@@ -8,7 +8,7 @@ struct PredictionInsightCardView: View {
     }
 
     private var trendLabel: String {
-        prediction.trendDelta >= 0 ? "Growing demand" : "Softening demand"
+        prediction.trendDelta >= 0 ? "Demanda en aumento" : "Demanda a la baja"
     }
 
     var body: some View {
@@ -19,15 +19,15 @@ struct PredictionInsightCardView: View {
 
             HStack {
                 metricBlock(
-                    title: "Current average",
-                    value: "\(Int(prediction.currentAverage.rounded())) units"
+                    title: "Promedio actual",
+                    value: "\(Int(prediction.currentAverage.rounded())) unidades"
                 )
 
                 Spacer()
 
                 metricBlock(
-                    title: "Next predicted order",
-                    value: "\(Int(prediction.predictedNextOrder.rounded())) units"
+                    title: "Siguiente pedido previsto",
+                    value: "\(Int(prediction.predictedNextOrder.rounded())) unidades"
                 )
             }
 
@@ -35,7 +35,7 @@ struct PredictionInsightCardView: View {
                 Image(systemName: prediction.trendDelta >= 0 ? "arrow.up.right" : "arrow.down.right")
                     .foregroundStyle(trendColor)
 
-                Text("\(trendLabel): \(Int(abs(prediction.trendDelta).rounded())) units")
+                Text("\(trendLabel): \(Int(abs(prediction.trendDelta).rounded())) unidades")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(trendColor)
             }
@@ -66,6 +66,6 @@ struct PredictionInsightCardView: View {
     }
 
     private var accessibilitySummary: String {
-        "\(trendLabel). Current average \(Int(prediction.currentAverage.rounded())) units. Next predicted order \(Int(prediction.predictedNextOrder.rounded())) units. Trend delta \(Int(abs(prediction.trendDelta).rounded())) units."
+        "\(trendLabel). Promedio actual \(Int(prediction.currentAverage.rounded())) unidades. Siguiente pedido previsto \(Int(prediction.predictedNextOrder.rounded())) unidades. Variacion de tendencia \(Int(abs(prediction.trendDelta).rounded())) unidades."
     }
 }

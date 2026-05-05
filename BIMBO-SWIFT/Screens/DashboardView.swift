@@ -23,8 +23,8 @@ struct DashboardView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     
                     SectionHeaderView(
-                        title: "Welcome!",
-                        subtitle: "Tracing your current delivery route..."
+                        title: "Bienvenido",
+                        subtitle: "Trazando tu ruta de reparto actual..."
                     )
 
                     
@@ -42,13 +42,13 @@ struct DashboardView: View {
                             
                             LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
                                 SummaryMetricCardView(
-                                    title: "Active clients",
+                                    title: "Clientes activos",
                                     value: "\(clients.count)",
                                     systemImage: "person.3.fill"
                                 )
                                 SummaryMetricCardView(
-                                    title: "Weekly average units",
-                                    value: "\(Int(totalWeeklyUnits.rounded())) units",
+                                    title: "Promedio semanal",
+                                    value: "\(Int(totalWeeklyUnits.rounded())) unidades",
                                     systemImage: "chart.line.uptrend.xyaxis"
                                 )
                             }.frame(maxWidth: .infinity, alignment: .center)
@@ -56,13 +56,13 @@ struct DashboardView: View {
                             
                             LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
                                 SummaryMetricCardView(
-                                    title: "Average rating",
+                                    title: "Calificacion promedio",
                                     value: String(format: "%.1f / 5", averageRating),
                                     systemImage: "star.fill"
                                 )
 
                                 SummaryMetricCardView(
-                                    title: "Tracked categories",
+                                    title: "Categorias monitoreadas",
                                     value: "\(topCategoryCount)",
                                     systemImage: "shippingbox.fill"
                                 )
@@ -78,11 +78,11 @@ struct DashboardView: View {
                 .padding(20)
             }
             .background(AppColors.backgroundWhite.ignoresSafeArea())
-            .navigationTitle("Dashboard")
+            .navigationTitle("Inicio")
             .navigationBarTitleDisplayMode(.inline)
         }
         .tabItem {
-            Label("Dashboard", systemImage: "square.grid.2x2")
+            Label("Inicio", systemImage: "square.grid.2x2")
         }
     }
 }

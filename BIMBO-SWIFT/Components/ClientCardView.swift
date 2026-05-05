@@ -7,7 +7,7 @@ struct ClientCardView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("KEY ACCOUNT")
+                    Text("CUENTA CLAVE")
                         .font(.caption2.weight(.heavy))
                         .tracking(1.2)
                         .foregroundStyle(AppColors.secondaryText)
@@ -17,7 +17,7 @@ struct ClientCardView: View {
                         .foregroundStyle(AppColors.primaryBlue)
                         .multilineTextAlignment(.leading)
 
-                    Text("Client ID: \(client.id)")
+                    Text("ID cliente: \(client.id)")
                         .font(.subheadline)
                         .foregroundStyle(AppColors.secondaryText)
                 }
@@ -25,7 +25,7 @@ struct ClientCardView: View {
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 8) {
-                    Text("Health")
+                    Text("Estado")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(AppColors.secondaryText)
 
@@ -46,12 +46,12 @@ struct ClientCardView: View {
                     .overlay(AppColors.cardBorder.opacity(0.9))
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Top Products")
+                    Text("Productos principales")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppColors.primaryBlue)
 
                     if topProducts.isEmpty {
-                        Text("No order history")
+                        Text("Sin historial de pedidos")
                             .font(.caption)
                             .foregroundStyle(AppColors.secondaryText)
                     } else {
@@ -119,7 +119,7 @@ struct ClientCardView: View {
 
     private var metricPanel: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Average weekly units")
+            Text("Promedio semanal")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(AppColors.secondaryText)
 
@@ -128,7 +128,7 @@ struct ClientCardView: View {
                     .font(.system(size: 30, weight: .black, design: .rounded))
                     .foregroundStyle(AppColors.accentRed)
 
-                Text("units")
+                Text("unidades")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AppColors.secondaryText)
             }
@@ -143,9 +143,9 @@ struct ClientCardView: View {
 
     private var accessibilitySummary: String {
         let productsSummary = topProducts.isEmpty
-            ? "No order history"
-            : "Top products: \(topProducts.joined(separator: ", "))"
+            ? "Sin historial de pedidos"
+            : "Productos principales: \(topProducts.joined(separator: ", "))"
 
-        return "Client ID \(client.id). Rating \(client.rating) out of 5. Average weekly units \(Int(client.weeklyPurchaseAverage.rounded())). \(productsSummary)."
+        return "ID cliente \(client.id). Calificacion \(client.rating) de 5. Promedio semanal \(Int(client.weeklyPurchaseAverage.rounded())) unidades. \(productsSummary)."
     }
 }

@@ -6,16 +6,16 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     SectionHeaderView(
-                        title: "Settings",
-                        subtitle: "Placeholder configuration content for future app options."
+                        title: "Configuracion",
+                        subtitle: "Contenido de configuracion provisional para opciones futuras."
                     )
 
                     VStack(alignment: .leading, spacing: 14) {
-                        Text("Display")
+                        Text("Pantalla")
                             .font(.headline)
                             .foregroundStyle(AppColors.primaryBlue)
 
-                        Text("This screen can host user preferences, filters, and account options.")
+                        Text("Esta pantalla puede incluir preferencias del usuario, filtros y opciones de cuenta.")
                             .foregroundStyle(AppColors.secondaryText)
                     }
                     .padding(20)
@@ -30,11 +30,11 @@ struct SettingsView: View {
                 .padding(20)
             }
             .background(AppColors.backgroundWhite.ignoresSafeArea())
-            .navigationTitle("Settings")
+            .navigationTitle("Configuracion")
             .navigationBarTitleDisplayMode(.inline)
         }
         .tabItem {
-            Label("Settings", systemImage: "gearshape.fill")
+            Label("Configuracion", systemImage: "gearshape.fill")
         }
     }
 }

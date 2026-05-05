@@ -12,8 +12,8 @@ struct ClientsListView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
                     SectionHeaderView(
-                        title: "Clients",
-                        subtitle: "Weekly purchase insights for key customer accounts."
+                        title: "Clientes",
+                        subtitle: "Resumen semanal de compra para cuentas clave."
                     )
 
                     LazyVGrid(columns: columns, spacing: 24) {
@@ -31,11 +31,11 @@ struct ClientsListView: View {
                 .padding(.vertical, 28)
             }
             .background(AppColors.backgroundWhite.ignoresSafeArea())
-            .navigationTitle("Client List")
+            .navigationTitle("Lista de clientes")
             .navigationBarTitleDisplayMode(.inline)
         }
         .tabItem {
-            Label("Clients", systemImage: "list.bullet.rectangle")
+            Label("Clientes", systemImage: "list.bullet.rectangle")
         }
     }
 }

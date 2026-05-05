@@ -26,7 +26,7 @@ struct ClientDetailView: View {
                     VStack(alignment: .leading, spacing: 24) {
                         SectionHeaderView(
                             title: client.name,
-                            subtitle: "Client ID \(client.id) con prediccion de la proxima semana por categoria."
+                            subtitle: "ID cliente \(client.id) con prediccion de la proxima semana por categoria."
                         )
 
                         ClientCardView(client: client)
