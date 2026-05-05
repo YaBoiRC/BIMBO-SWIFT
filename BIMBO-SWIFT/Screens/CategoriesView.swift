@@ -875,10 +875,20 @@ struct CargamentoView: View {
                         .foregroundStyle(AppColors.accentRed)
                 }
 
-                if let trayName = directive.trayName {
-                    Text(trayName)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppColors.secondaryText)
+                if !directive.badges.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(directive.badges, id: \.self) { badge in
+                            Text(badge)
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(AppColors.primaryBlue)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(
+                                    Capsule()
+                                        .fill(AppColors.primaryBlue.opacity(0.08))
+                                )
+                        }
+                    }
                 }
             }
 

@@ -20,6 +20,9 @@ struct SurtidoView: View {
     @State private var narratedDirectiveIndex: Int?
     @State private var awaitingDirectiveConfirmationIndex: Int?
     @State private var validatedDirectiveIndices: Set<Int> = []
+    @State private var isShowingSpeechValidationSheet = false
+    @State private var speechRecognizer = ValidationSpeechRecognizer()
+    @State private var speechApplyStatusMessage: String?
 
     init() {
         let clients = ClientRepository.sampleClients
@@ -613,11 +616,47 @@ struct SurtidoView: View {
             }
         }
         .presentationDetents([.large])
+        .sheet(isPresented: $isShowingSpeechValidationSheet) {
+            validationSpeechSheet
+        }
     }
 
     private var validationStepView: some View {
         VStack(alignment: .leading, spacing: 18) {
             sectionTitle("1. Validacion por categoria")
+
+            inputCard {
+                Text("Captura por voz")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppColors.primaryBlue)
+
+                Text("Di la categoria, las piezas actuales, echado a perder y el objetivo del cliente.")
+                    .font(.caption)
+                    .foregroundStyle(AppColors.secondaryText)
+
+                Button {
+                    speechRecognizer.reset()
+                    speechApplyStatusMessage = nil
+                    isShowingSpeechValidationSheet = true
+                } label: {
+                    Label("Registrar por voz", systemImage: "mic.fill")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(Color.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(AppColors.accentRed)
+                        )
+                }
+                .buttonStyle(.plain)
+
+                if let speechApplyStatusMessage {
+                    Text(speechApplyStatusMessage)
+                        .font(.caption)
+                        .foregroundStyle(AppColors.secondaryText)
+                }
+            }
 
             inputCard {
                 Text("Categoria")
@@ -685,6 +724,112 @@ struct SurtidoView: View {
             .disabled(!hasValidatedCategories)
             .buttonStyle(.plain)
         }
+    }
+
+    private var validationSpeechSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    inputCard {
+                        Text("Registro por voz")
+                            .font(.headline)
+                            .foregroundStyle(AppColors.primaryBlue)
+
+                        Text("Ejemplos: Galletas, piezas actuales 12, echado a perder 2, objetivo del cliente 20. O bien: Galletas, peso total 250 gramos, echado a perder 2, objetivo del cliente 20.")
+                            .font(.caption)
+                            .foregroundStyle(AppColors.secondaryText)
+
+                        HStack(spacing: 10) {
+                            Button {
+                                Task {
+                                    await speechRecognizer.startRecording()
+                                }
+                            } label: {
+                                Label(
+                                    speechRecognizer.isRecording ? "Escuchando..." : "Iniciar grabacion",
+                                    systemImage: "mic.fill"
+                                )
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Color.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .fill(speechRecognizer.isRecording ? AppColors.cardBorder : AppColors.primaryBlue)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(speechRecognizer.isRecording)
+
+                            Button {
+                                speechRecognizer.stopRecording()
+                            } label: {
+                                Label("Detener", systemImage: "stop.fill")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(AppColors.primaryBlue)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                            .fill(Color.white)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                            .stroke(AppColors.cardBorder, lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        if let errorMessage = speechRecognizer.errorMessage {
+                            Text(errorMessage)
+                                .font(.caption)
+                                .foregroundStyle(AppColors.accentRed)
+                        }
+                    }
+
+                    inputCard {
+                        Text("Transcripcion")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppColors.primaryBlue)
+
+                        Text(speechRecognizer.transcript.isEmpty ? "Aun no hay texto capturado." : speechRecognizer.transcript)
+                            .font(.body)
+                            .foregroundStyle(AppColors.primaryBlue)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Button {
+                            applySpeechTranscript()
+                        } label: {
+                            Label("Aplicar a validacion", systemImage: "waveform.badge.magnifyingglass")
+                                .font(.headline.weight(.bold))
+                                .foregroundStyle(Color.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .fill(speechRecognizer.transcript.isEmpty ? AppColors.cardBorder : AppColors.accentRed)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(speechRecognizer.transcript.isEmpty)
+                    }
+                }
+                .padding(20)
+            }
+            .background(AppColors.backgroundWhite.ignoresSafeArea())
+            .navigationTitle("Validacion por voz")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cerrar") {
+                        speechRecognizer.reset()
+                        isShowingSpeechValidationSheet = false
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 
     private var selectedCategory: CategoryValidationDraft? {
@@ -830,6 +975,49 @@ struct SurtidoView: View {
                 binding.wrappedValue = newValue.filter(\.isNumber)
             }
         )
+    }
+
+    private func applySpeechTranscript() {
+        let parsed = ValidationSpeechRecognizer.parse(
+            transcript: speechRecognizer.transcript,
+            categories: categoryDrafts.map(\.categoryName)
+        )
+
+        if let categoryName = parsed.categoryName,
+           let detectedIndex = categoryDrafts.firstIndex(where: { $0.categoryName == categoryName }) {
+            selectedCategoryDraftID = categoryDrafts[detectedIndex].id
+        }
+
+        guard let selectedCategoryIndex else {
+            speechApplyStatusMessage = "No se detecto una categoria valida en el audio."
+            return
+        }
+
+        if let currentWeightGrams = parsed.currentWeightGrams {
+            categoryDrafts[selectedCategoryIndex].inputMode = .weight
+            categoryDrafts[selectedCategoryIndex].currentInventoryWeightText = String(currentWeightGrams)
+            categoryDrafts[selectedCategoryIndex].currentInventoryUnitsText = ""
+        } else if let currentPieces = parsed.currentPieces {
+            categoryDrafts[selectedCategoryIndex].inputMode = .units
+            categoryDrafts[selectedCategoryIndex].currentInventoryUnitsText = String(currentPieces)
+            categoryDrafts[selectedCategoryIndex].currentInventoryWeightText = ""
+        }
+
+        if let spoiledPieces = parsed.spoiledPieces {
+            categoryDrafts[selectedCategoryIndex].spoiledQuantityText = String(spoiledPieces)
+        }
+
+        if let purchaseQuantity = parsed.purchaseQuantity {
+            categoryDrafts[selectedCategoryIndex].replenishmentMode = .purchaseOnly
+            categoryDrafts[selectedCategoryIndex].purchaseQuantityText = String(purchaseQuantity)
+        } else if let targetTotal = parsed.targetTotal {
+            categoryDrafts[selectedCategoryIndex].replenishmentMode = .targetTotal
+            categoryDrafts[selectedCategoryIndex].targetTotalText = String(targetTotal)
+        }
+
+        speechApplyStatusMessage = "La validacion por voz se aplico a \(categoryDrafts[selectedCategoryIndex].categoryName)."
+        speechRecognizer.reset()
+        isShowingSpeechValidationSheet = false
     }
 
     private func unloadStepView(for routeStop: ClientRouteStop) -> some View {
@@ -1213,10 +1401,20 @@ struct SurtidoView: View {
                         .foregroundStyle(AppColors.accentRed)
                 }
 
-                if let trayName = directive.trayName {
-                    Text(trayName)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppColors.secondaryText)
+                if !directive.badges.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(directive.badges, id: \.self) { badge in
+                            Text(badge)
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(AppColors.primaryBlue)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(
+                                    Capsule()
+                                        .fill(AppColors.primaryBlue.opacity(0.08))
+                                )
+                        }
+                    }
                 }
             }
 

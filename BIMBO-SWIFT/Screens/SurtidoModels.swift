@@ -84,6 +84,7 @@ struct UnloadDirective: Identifiable {
     let kind: UnloadDirectiveKind
     let message: String
     let trayName: String?
+    let badges: [String]
 }
 
 struct UnloadGuideResult {
