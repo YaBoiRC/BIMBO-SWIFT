@@ -35,7 +35,7 @@ struct DashboardView: View {
                     ZStack
                     {
                         
-                    //Color.blue
+                        Color.blue.padding(-20)
                         VStack
                         {
                             
