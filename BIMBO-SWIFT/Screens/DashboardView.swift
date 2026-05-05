@@ -3,7 +3,7 @@ import SwiftUI
 struct DashboardView: View {
     let clients: [Client]
 
-    private var totalWeeklySales: Double {
+    private var totalWeeklyUnits: Double {
         clients.reduce(0) { $0 + $1.weeklyPurchaseAverage }
     }
 
@@ -32,8 +32,8 @@ struct DashboardView: View {
                             systemImage: "person.3.fill"
                         )
                         SummaryMetricCardView(
-                            title: "Weekly average total",
-                            value: totalWeeklySales.formatted(.currency(code: "USD").precision(.fractionLength(0))),
+                            title: "Weekly average units",
+                            value: "\(Int(totalWeeklyUnits.rounded())) units",
                             systemImage: "chart.line.uptrend.xyaxis"
                         )
                         SummaryMetricCardView(
