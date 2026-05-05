@@ -2,6 +2,19 @@ import AVFoundation
 import FoundationModels
 import SwiftUI
 
+
+struct LoadGuideTrayInput {
+    let clientName: String
+    let trayName: String
+    let wallName: String
+    let shelfName: String
+    let productName: String
+    let slotNumbers: [Int]
+    let quantity: Int
+    let weightKg: Double
+    let productionDate: String
+}
+
 struct UnloadGuideGenerator {
     private let model = SystemLanguageModel.default
 
@@ -224,6 +237,133 @@ struct UnloadGuideGenerator {
                     trayName: assignment.trayName
                 )
             }
+    }
+}
+
+
+struct LoadGuideGenerator {
+    private let model = SystemLanguageModel.default
+
+    func generateGuide(
+        shelfName: String,
+        wallName: String,
+        trays: [LoadGuideTrayInput]
+    ) async throws -> UnloadGuideResult {
+        guard model.availability == .available else {
+            return Self.fallbackGuide(
+                shelfName: shelfName,
+                wallName: wallName,
+                trays: trays,
+                message: availabilityMessage
+            )
+        }
+
+        let session = LanguageModelSession(instructions: """
+        Genera instrucciones operativas para acomodar cargamento en anaqueles.
+        Responde solo con lineas que empiecen con STEP: o STOPPER:.
+        Cada linea debe ser corta, accionable y en espanol.
+        Enfocate en el orden de acomodo, produccion y cantidades por bandeja.
+        No generes pasos vacios o genericos como entrar o salir.
+        Incluye el detalle de pared, anaquel, bandeja, slots, cantidad y fecha de produccion.
+        """)
+
+        let trayText = trays.map { tray in
+            "\(tray.trayName) | cliente \(tray.clientName) | \(tray.productName) | pared \(tray.wallName) | anaquel \(tray.shelfName) | slots \(tray.slotNumbers.map(String.init).joined(separator: ", ")) | cantidad \(tray.quantity) | peso \(String(format: "%.2f", tray.weightKg)) kg | produccion \(tray.productionDate)"
+        }
+        .joined(separator: "\n")
+
+        let prompt = """
+        Pared: \(wallName)
+        Anaquel: \(shelfName)
+        Bandejas a cargar:
+        \(trayText)
+
+        Genera entre 5 y 9 lineas.
+        Prioriza el orden de acomodo y verificaciones antes de cerrar cada bandeja.
+        """
+
+        let response = try await session.respond(to: prompt)
+        let directives = parseDirectives(from: response.content)
+
+        if directives.isEmpty {
+            return Self.fallbackGuide(
+                shelfName: shelfName,
+                wallName: wallName,
+                trays: trays,
+                message: "La AI no devolvio un formato util. Se muestra una guia local."
+            )
+        }
+
+        return UnloadGuideResult(
+            directives: directives,
+            statusMessage: "Guia de cargamento generada con Apple Intelligence."
+        )
+    }
+
+    private func parseDirectives(from text: String) -> [UnloadDirective] {
+        text
+            .split(separator: "\n")
+            .compactMap { rawLine in
+                let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                if line.hasPrefix("STEP:") {
+                    let message = line.replacingOccurrences(of: "STEP:", with: "").trimmingCharacters(in: .whitespaces)
+                    return UnloadDirective(kind: .step, message: message, trayName: nil)
+                }
+
+                if line.hasPrefix("STOPPER:") {
+                    let message = line.replacingOccurrences(of: "STOPPER:", with: "").trimmingCharacters(in: .whitespaces)
+                    return UnloadDirective(kind: .stopper, message: message, trayName: nil)
+                }
+
+                return nil
+            }
+    }
+
+    private var availabilityMessage: String? {
+        switch model.availability {
+        case .available:
+            return nil
+        case .unavailable(.deviceNotEligible):
+            return "Este dispositivo no es compatible con Apple Intelligence."
+        case .unavailable(.appleIntelligenceNotEnabled):
+            return "Apple Intelligence esta desactivada."
+        case .unavailable(.modelNotReady):
+            return "El modelo generativo aun no esta listo."
+        case .unavailable:
+            return "La AI generativa no esta disponible en este momento."
+        }
+    }
+
+    static func fallbackGuide(
+        shelfName: String,
+        wallName: String,
+        trays: [LoadGuideTrayInput],
+        message: String?
+    ) -> UnloadGuideResult {
+        var directives: [UnloadDirective] = [
+            UnloadDirective(kind: .step, message: "Confirma que la carga corresponde a \(wallName), \(shelfName), antes de abrir la primera bandeja.", trayName: nil),
+            UnloadDirective(kind: .step, message: "Verifica que cada bandeja tenga cantidad registrada y fecha de produccion antes de acomodarla.", trayName: nil),
+            UnloadDirective(kind: .stopper, message: "Deten el acomodo si falta fecha de produccion o si una bandeja no coincide con el pedido del cliente.", trayName: nil)
+        ]
+
+        directives += trays.prefix(6).map { tray in
+            UnloadDirective(
+                kind: .step,
+                message: "Acomoda \(tray.quantity) productos de \(tray.productName) para \(tray.clientName) en \(tray.trayName), \(tray.shelfName), \(tray.wallName), usando slots \(tray.slotNumbers.map(String.init).joined(separator: ", ")); produccion \(tray.productionDate).",
+                trayName: tray.trayName
+            )
+        }
+
+        directives.append(
+            UnloadDirective(
+                kind: .stopper,
+                message: "No cierres el anaquel hasta validar que el peso o la cantidad final de cada bandeja coincida con el registro.",
+                trayName: nil
+            )
+        )
+
+        return UnloadGuideResult(directives: directives, statusMessage: message)
     }
 }
 

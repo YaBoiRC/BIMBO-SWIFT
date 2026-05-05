@@ -56,7 +56,9 @@ enum ClientRepository {
                     OrderItem(id: "OI-3-4", product: gamesa,         quantity: 6)
                 ], status: .pending)
             ],
-            categories: [categories[0], categories[1], categories[3]]
+            categories: [categories[0], categories[1], categories[3]],
+            latitude: 19.4326,
+            longitude: -99.1332
         ),
         Client(
             id: "CL-1002",
@@ -67,7 +69,9 @@ enum ClientRepository {
                 CategoryPurchaseHistory(categoryName: categories[2], weeklyOrders: [120, 132, 140, 144, 150, 158])
             ],
             orderHistory: [],
-            categories: [categories[0], categories[2]]
+            categories: [categories[0], categories[2]],
+            latitude: 19.4271,
+            longitude: -99.1677
         ),
         Client(
             id: "CL-1003",
@@ -78,7 +82,9 @@ enum ClientRepository {
                 CategoryPurchaseHistory(categoryName: categories[3], weeklyOrders: [90, 94, 98, 104, 100, 108])
             ],
             orderHistory: [],
-            categories: [categories[1], categories[3]]
+            categories: [categories[1], categories[3]],
+            latitude: 19.4042,
+            longitude: -99.1706
         ),
         Client(
             id: "CL-1004",
@@ -91,7 +97,9 @@ enum ClientRepository {
                 CategoryPurchaseHistory(categoryName: categories[3], weeklyOrders: [160, 168, 172, 180, 188, 196])
             ],
             orderHistory: [],
-            categories: categories
+            categories: categories,
+            latitude: 19.4537,
+            longitude: -99.1462
         )
     ]
 }

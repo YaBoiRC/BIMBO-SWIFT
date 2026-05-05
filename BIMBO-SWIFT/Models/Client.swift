@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 
 struct Client: Identifiable {
@@ -12,6 +13,12 @@ struct Client: Identifiable {
     }
     
     let categories: [String]
+    let latitude: Double
+    let longitude: Double
+
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
 }
 
 struct CategoryPurchaseHistory: Identifiable {

@@ -17,6 +17,9 @@ struct SurtidoView: View {
     @State private var isGeneratingAIGuide = false
     @State private var aiGuideClientID: String?
     @State private var isNarratingGuide = false
+    @State private var narratedDirectiveIndex: Int?
+    @State private var awaitingDirectiveConfirmationIndex: Int?
+    @State private var validatedDirectiveIndices: Set<Int> = []
 
     init() {
         let clients = ClientRepository.sampleClients
@@ -42,6 +45,7 @@ struct SurtidoView: View {
 
     private var activeRouteStop: ClientRouteStop? {
 
+
         guard routeStops.indices.contains(currentClientRouteIndex) else { return nil }
         return routeStops[currentClientRouteIndex]
     }
@@ -50,7 +54,6 @@ struct SurtidoView: View {
         guard let selectedCategoryDraftID else { return nil }
 
         return categoryDrafts.firstIndex { $0.id == selectedCategoryDraftID }
-
     }
 
     var body: some View {
@@ -261,8 +264,7 @@ struct SurtidoView: View {
             }
         }
     }
-
-
+    
     private var validationActionCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Validacion de desembarque")
@@ -535,6 +537,9 @@ struct SurtidoView: View {
         aiGuideDirectives = []
         aiGuideStatusMessage = nil
         aiGuideClientID = nil
+        narratedDirectiveIndex = nil
+        awaitingDirectiveConfirmationIndex = nil
+        validatedDirectiveIndices = []
         if let routeStop = activeRouteStop {
             configureDrafts(for: routeStop)
         }
@@ -594,6 +599,7 @@ struct SurtidoView: View {
                     }
                 }
                 .padding(20)
+
             }
             .background(AppColors.backgroundWhite.ignoresSafeArea())
             .navigationTitle("Validacion")
@@ -906,7 +912,7 @@ struct SurtidoView: View {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(spacing: 10) {
                                 Button {
-                                    speakAIGuide()
+                                    startNarration(from: 0)
                                 } label: {
                                     Label(
                                         isNarratingGuide ? "Reproduciendo..." : "Narrar pasos",
@@ -944,8 +950,8 @@ struct SurtidoView: View {
                                 .buttonStyle(.plain)
                             }
 
-                            ForEach(aiGuideDirectives) { directive in
-                                aiDirectiveCard(directive)
+                            ForEach(Array(aiGuideDirectives.enumerated()), id: \.element.id) { index, directive in
+                                aiDirectiveCard(directive, index: index)
                             }
                         }
                     }
@@ -1003,6 +1009,9 @@ struct SurtidoView: View {
             aiGuideDirectives = []
             aiGuideStatusMessage = nil
             aiGuideClientID = nil
+            narratedDirectiveIndex = nil
+            awaitingDirectiveConfirmationIndex = nil
+            validatedDirectiveIndices = []
             if let routeStop = activeRouteStop {
                 configureDrafts(for: routeStop)
             }
@@ -1101,6 +1110,9 @@ struct SurtidoView: View {
             )
             aiGuideDirectives = result.directives
             aiGuideStatusMessage = result.statusMessage
+            narratedDirectiveIndex = nil
+            awaitingDirectiveConfirmationIndex = nil
+            validatedDirectiveIndices = []
         } catch {
             let fallback = UnloadGuideGenerator.fallbackGuide(
                 clientName: routeStop.client.name,
@@ -1110,25 +1122,36 @@ struct SurtidoView: View {
             )
             aiGuideDirectives = fallback.directives
             aiGuideStatusMessage = fallback.statusMessage
+            narratedDirectiveIndex = nil
+            awaitingDirectiveConfirmationIndex = nil
+            validatedDirectiveIndices = []
         }
 
         isGeneratingAIGuide = false
     }
 
-    private func speakAIGuide() {
-        guard !aiGuideDirectives.isEmpty else { return }
+    private func startNarration(from index: Int) {
+        guard aiGuideDirectives.indices.contains(index) else { return }
+        guard awaitingDirectiveConfirmationIndex == nil else { return }
 
-        let script = aiGuideDirectives.enumerated().map { index, directive in
-            let prefix = directive.kind == .step ? "Paso \(index + 1)." : "Alerta."
-            return "\(prefix) \(directive.message)"
-        }
-        .joined(separator: " ")
+        let nextIndex = aiGuideDirectives[index].kind == .step ? index : nextStepIndex(after: index - 1)
+        guard let directiveIndex = nextIndex else { return }
+        speakDirective(at: directiveIndex)
+    }
 
+    private func speakDirective(at index: Int) {
+        guard aiGuideDirectives.indices.contains(index) else { return }
+
+        let directive = aiGuideDirectives[index]
+        let prefix = directive.kind == .step ? "Paso \(stepNumber(for: index))." : "Alerta."
         isNarratingGuide = true
+        narratedDirectiveIndex = index
+        awaitingDirectiveConfirmationIndex = nil
         UnloadGuideNarrator.shared.speak(
-            text: script,
+            text: "\(prefix) \(directive.message)",
             onFinish: {
                 isNarratingGuide = false
+                awaitingDirectiveConfirmationIndex = index
             }
         )
     }
@@ -1136,19 +1159,59 @@ struct SurtidoView: View {
     private func stopSpeakingAIGuide() {
         UnloadGuideNarrator.shared.stop()
         isNarratingGuide = false
+        narratedDirectiveIndex = nil
+        awaitingDirectiveConfirmationIndex = nil
     }
 
-    private func aiDirectiveCard(_ directive: UnloadDirective) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func confirmDirective(_ index: Int) {
+        guard aiGuideDirectives.indices.contains(index) else { return }
+
+        validatedDirectiveIndices.insert(index)
+        awaitingDirectiveConfirmationIndex = nil
+
+        guard let nextIndex = nextStepIndex(after: index) else {
+            narratedDirectiveIndex = nil
+            aiGuideStatusMessage = "Lectura completada. Todos los pasos narrados quedaron validados."
+            return
+        }
+
+        speakDirective(at: nextIndex)
+    }
+
+    private func nextStepIndex(after index: Int) -> Int? {
+        let start = max(0, index + 1)
+        return aiGuideDirectives.indices.first { candidate in
+            candidate >= start && aiGuideDirectives[candidate].kind == .step
+        }
+    }
+
+    private func stepNumber(for index: Int) -> Int {
+        aiGuideDirectives[..<index].reduce(0) { partial, directive in
+            partial + (directive.kind == .step ? 1 : 0)
+        } + 1
+    }
+
+    private func aiDirectiveCard(_ directive: UnloadDirective, index: Int) -> some View {
+        let isStep = directive.kind == .step
+        let isAwaitingConfirmation = awaitingDirectiveConfirmationIndex == index
+        let isNarratingThisDirective = narratedDirectiveIndex == index && isNarratingGuide
+        let isValidated = validatedDirectiveIndices.contains(index)
+
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Label(
-                    directive.kind == .step ? "STEP" : "STOPPER",
-                    systemImage: directive.kind == .step ? "list.number" : "exclamationmark.triangle.fill"
+                    isStep ? "STEP" : "STOPPER",
+                    systemImage: isStep ? "list.number" : "exclamationmark.triangle.fill"
                 )
                 .font(.caption.weight(.bold))
-                .foregroundStyle(directive.kind == .step ? AppColors.primaryBlue : AppColors.accentRed)
+                .foregroundStyle(isStep ? AppColors.primaryBlue : AppColors.accentRed)
 
                 Spacer()
+
+                if isValidated {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(AppColors.accentRed)
+                }
 
                 if let trayName = directive.trayName {
                     Text(trayName)
@@ -1160,16 +1223,66 @@ struct SurtidoView: View {
             Text(directive.message)
                 .font(.subheadline)
                 .foregroundStyle(AppColors.primaryBlue)
+
+            if isStep {
+                HStack(spacing: 10) {
+                    Button {
+                        startNarration(from: index)
+                    } label: {
+                        Label(
+                            isNarratingThisDirective ? "Leyendo..." : "Escuchar desde aqui",
+                            systemImage: "speaker.wave.2.fill"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(isNarratingThisDirective ? AppColors.cardBorder : AppColors.primaryBlue)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isNarratingGuide || awaitingDirectiveConfirmationIndex != nil)
+
+                    if isAwaitingConfirmation {
+                        Button {
+                            confirmDirective(index)
+                        } label: {
+                            Label("Validar y seguir", systemImage: "checkmark.circle.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppColors.primaryBlue)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.white)
+                                )
+                                .overlay(
+                                    Capsule()
+                                        .stroke(AppColors.cardBorder, lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
         }
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(directive.kind == .step ? Color.white : AppColors.accentRed.opacity(0.08))
+                .fill(
+                    isAwaitingConfirmation
+                    ? AppColors.primaryBlue.opacity(0.08)
+                    : (isStep ? Color.white : AppColors.accentRed.opacity(0.08))
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(
-                    directive.kind == .step ? AppColors.cardBorder : AppColors.accentRed.opacity(0.35),
+                    isAwaitingConfirmation
+                    ? AppColors.primaryBlue.opacity(0.35)
+                    : (isStep ? AppColors.cardBorder : AppColors.accentRed.opacity(0.35)),
                     lineWidth: 1
                 )
         )
