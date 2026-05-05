@@ -8,7 +8,7 @@ struct ContentView: View {
             DashboardView(clients: clients)
             ClientsListView(clients: clients)
             SurtidoView()
-            CategoriesView(categories: ClientRepository.categories)
+            CargamentoView()
             SettingsView()
         }
         .tint(AppColors.primaryBlue)

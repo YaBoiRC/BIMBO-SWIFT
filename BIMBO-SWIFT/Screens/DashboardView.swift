@@ -1,4 +1,5 @@
 import SwiftUI
+import MapKit
 
 struct DashboardView: View {
     let clients: [Client]
@@ -20,12 +21,13 @@ struct DashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    SectionHeaderView(
-                        title: "Overview",
-                        subtitle: "A simple dashboard adapted for iPhone and iPad screens."
-                    )
-
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 16)], spacing: 16) {
+                    
+                    
+                    
+                    MapSectionView()
+                        .padding(.horizontal, -20)
+                    
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
                         SummaryMetricCardView(
                             title: "Active clients",
                             value: "\(clients.count)",
@@ -36,17 +38,26 @@ struct DashboardView: View {
                             value: "\(Int(totalWeeklyUnits.rounded())) units",
                             systemImage: "chart.line.uptrend.xyaxis"
                         )
+                    }.frame(maxWidth: .infinity, alignment: .center)
+                    
+                    
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
                         SummaryMetricCardView(
                             title: "Average rating",
                             value: String(format: "%.1f / 5", averageRating),
                             systemImage: "star.fill"
                         )
+
                         SummaryMetricCardView(
                             title: "Tracked categories",
                             value: "\(topCategoryCount)",
                             systemImage: "shippingbox.fill"
                         )
-                    }
+                    }.frame(maxWidth: .infinity, alignment: .center)
+                    
+
+                        
+                    
                 }
                 .padding(20)
             }
@@ -58,4 +69,7 @@ struct DashboardView: View {
             Label("Dashboard", systemImage: "square.grid.2x2")
         }
     }
+}
+#Preview {
+    ContentView()
 }
