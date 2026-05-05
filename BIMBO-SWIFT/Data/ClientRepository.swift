@@ -29,7 +29,6 @@ enum ClientRepository {
         Client(
             id: "CL-1001",
             name: "Lopez Market",
-            rating: 4,
             categoryPurchaseHistory: [
                 CategoryPurchaseHistory(categoryName: categories[0], weeklyOrders: [320, 340, 355, 372, 390, 402]),
                 CategoryPurchaseHistory(categoryName: categories[1], weeklyOrders: [180, 195, 188, 205, 214, 220]),
@@ -63,7 +62,6 @@ enum ClientRepository {
         Client(
             id: "CL-1002",
             name: "Sunrise Grocery",
-            rating: 5,
             categoryPurchaseHistory: [
                 CategoryPurchaseHistory(categoryName: categories[0], weeklyOrders: [260, 272, 268, 280, 289, 300]),
                 CategoryPurchaseHistory(categoryName: categories[2], weeklyOrders: [120, 132, 140, 144, 150, 158])
@@ -76,7 +74,6 @@ enum ClientRepository {
         Client(
             id: "CL-1003",
             name: "Central Deli",
-            rating: 3,
             categoryPurchaseHistory: [
                 CategoryPurchaseHistory(categoryName: categories[1], weeklyOrders: [150, 148, 152, 158, 164, 170]),
                 CategoryPurchaseHistory(categoryName: categories[3], weeklyOrders: [90, 94, 98, 104, 100, 108])
@@ -89,7 +86,6 @@ enum ClientRepository {
         Client(
             id: "CL-1004",
             name: "Northside Foods",
-            rating: 5,
             categoryPurchaseHistory: [
                 CategoryPurchaseHistory(categoryName: categories[0], weeklyOrders: [380, 400, 415, 430, 450, 470]),
                 CategoryPurchaseHistory(categoryName: categories[1], weeklyOrders: [210, 225, 232, 240, 250, 262]),

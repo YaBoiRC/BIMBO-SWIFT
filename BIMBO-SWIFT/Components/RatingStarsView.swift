@@ -11,6 +11,6 @@ struct RatingStarsView: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Rating \(rating) out of 5 stars")
+        .accessibilityLabel("Confiabilidad \(rating) de 5 estrellas")
     }
 }

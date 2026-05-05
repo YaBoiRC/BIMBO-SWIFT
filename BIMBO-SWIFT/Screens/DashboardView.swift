@@ -56,7 +56,7 @@ struct DashboardView: View {
                             
                             LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
                                 SummaryMetricCardView(
-                                    title: "Calificacion promedio",
+                                    title: "Confiabilidad promedio",
                                     value: String(format: "%.1f / 5", averageRating),
                                     systemImage: "star.fill"
                                 )

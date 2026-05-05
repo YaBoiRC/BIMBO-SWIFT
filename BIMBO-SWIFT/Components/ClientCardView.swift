@@ -25,7 +25,7 @@ struct ClientCardView: View {
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 8) {
-                    Text("Estado")
+                    Text("Confiabilidad")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(AppColors.secondaryText)
 
@@ -146,6 +146,6 @@ struct ClientCardView: View {
             ? "Sin historial de pedidos"
             : "Productos principales: \(topProducts.joined(separator: ", "))"
 
-        return "ID cliente \(client.id). Calificacion \(client.rating) de 5. Promedio semanal \(Int(client.weeklyPurchaseAverage.rounded())) unidades. \(productsSummary)."
+        return "ID cliente \(client.id). Confiabilidad \(client.rating) de 5. Promedio semanal \(Int(client.weeklyPurchaseAverage.rounded())) unidades. \(productsSummary)."
     }
 }
