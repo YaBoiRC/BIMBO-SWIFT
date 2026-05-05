@@ -6,6 +6,7 @@ import SwiftUI
 struct MapSectionView: View {
     let clients: [Client]
     var simulatedStart: CLLocationCoordinate2D? = nil
+    var mapHeight: CGFloat = 300
 
     @State private var position: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var locationManager = LocationManager()
@@ -77,7 +78,7 @@ struct MapSectionView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 300)
+        .frame(height: mapHeight)
         .clipped()
         .accessibilityLabel("Route map")
         .accessibilityValue(accessibilityRouteSummary)
@@ -201,6 +202,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
 #Preview {
     MapSectionView(
         clients: ClientRepository.sampleClients,
-        simulatedStart: CLLocationCoordinate2D(latitude: 19.4400, longitude: -99.1500)
+        simulatedStart: CLLocationCoordinate2D(latitude: 19.4400, longitude: -99.1500),
+        mapHeight: 300
     )
 }

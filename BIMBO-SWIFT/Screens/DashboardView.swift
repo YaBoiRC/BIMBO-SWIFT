@@ -3,6 +3,7 @@ import MapKit
 
 struct DashboardView: View {
     let clients: [Client]
+    @State private var showsMetricsPanel = true
 
     private var totalWeeklyUnits: Double {
         clients.reduce(0) { $0 + $1.weeklyPurchaseAverage }
@@ -28,10 +29,12 @@ struct DashboardView: View {
                     )
 
                     
-                    MapSectionView(clients: clients)
-                        .padding(.horizontal, -20)
-                    
-                    dashboardMetricsPanel
+                    mapSection
+
+                    if showsMetricsPanel {
+                        dashboardMetricsPanel
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                 }
                 .padding(20)
             }
@@ -46,69 +49,103 @@ struct DashboardView: View {
 }
 
 private extension DashboardView {
-    var dashboardMetricsPanel: some View {
-        ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.97, green: 0.98, blue: 1.0),
-                            Color(red: 0.92, green: 0.96, blue: 0.99),
-                            Color(red: 0.98, green: 0.95, blue: 0.92)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+    var mapSectionHeight: CGFloat {
+        showsMetricsPanel ? 300 : 560
+    }
 
-            Circle()
-                .fill(AppColors.primaryBlue.opacity(0.12))
-                .frame(width: 220, height: 220)
-                .offset(x: 170, y: -90)
+    var mapSection: some View {
+        ZStack(alignment: .bottomTrailing) {
+            MapSectionView(clients: clients, mapHeight: mapSectionHeight)
+                .padding(.horizontal, -20)
 
-            Circle()
-                .fill(AppColors.accentRed.opacity(0.08))
-                .frame(width: 180, height: 180)
-                .offset(x: -50, y: 150)
-
-            VStack(alignment: .leading, spacing: 18) {
-                Text("Resumen operativo")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(AppColors.primaryBlue)
-
-                Text("Panorama rapido de clientes, volumen semanal, confiabilidad y categorias monitoreadas.")
-                    .font(.subheadline)
-                    .foregroundStyle(AppColors.secondaryText)
-
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
-                    SummaryMetricCardView(
-                        title: "Clientes activos",
-                        value: "\(clients.count)",
-                        systemImage: "person.3.fill"
-                    )
-                    SummaryMetricCardView(
-                        title: "Promedio semanal",
-                        value: "\(Int(totalWeeklyUnits.rounded())) unidades",
-                        systemImage: "chart.line.uptrend.xyaxis"
-                    )
-                    SummaryMetricCardView(
-                        title: "Confiabilidad promedio",
-                        value: String(format: "%.1f / 5", averageRating),
-                        systemImage: "star.fill"
-                    )
-                    SummaryMetricCardView(
-                        title: "Categorias monitoreadas",
-                        value: "\(topCategoryCount)",
-                        systemImage: "shippingbox.fill"
-                    )
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+                    showsMetricsPanel.toggle()
                 }
-                .frame(maxWidth: .infinity, alignment: .center)
+            } label: {
+                Label(
+                    showsMetricsPanel ? "Ocultar resumen" : "Mostrar resumen",
+                    systemImage: showsMetricsPanel ? "chevron.down.circle.fill" : "chevron.up.circle.fill"
+                )
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppColors.primaryBlue)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule()
+                        .fill(Color.white.opacity(0.96))
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(AppColors.cardBorder, lineWidth: 1)
+                )
+                .shadow(color: AppColors.primaryBlue.opacity(0.08), radius: 12, x: 0, y: 6)
             }
-            .padding(24)
+            .padding(.trailing, 10)
+            .padding(.bottom, 12)
+            .buttonStyle(.plain)
         }
+        .animation(.spring(response: 0.3, dampingFraction: 0.82), value: showsMetricsPanel)
+    }
+
+    var dashboardMetricsPanel: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Resumen operativo")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(AppColors.primaryBlue)
+
+                    Text("Consulta rapidamente clientes activos, volumen semanal, confiabilidad y cobertura de categorias.")
+                        .font(.subheadline)
+                        .foregroundStyle(AppColors.secondaryText)
+                }
+
+                Spacer()
+
+                Text("Actual")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(AppColors.primaryBlue)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule()
+                            .fill(AppColors.primaryBlue.opacity(0.08))
+                    )
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {
+                SummaryMetricCardView(
+                    title: "Clientes activos",
+                    value: "\(clients.count)",
+                    systemImage: "person.3.fill"
+                )
+                SummaryMetricCardView(
+                    title: "Promedio semanal",
+                    value: "\(Int(totalWeeklyUnits.rounded())) unidades",
+                    systemImage: "chart.line.uptrend.xyaxis"
+                )
+                SummaryMetricCardView(
+                    title: "Confiabilidad promedio",
+                    value: String(format: "%.1f / 5", averageRating),
+                    systemImage: "star.fill"
+                )
+                SummaryMetricCardView(
+                    title: "Categorias monitoreadas",
+                    value: "\(topCategoryCount)",
+                    systemImage: "shippingbox.fill"
+                )
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(Color.white)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .stroke(AppColors.cardBorder.opacity(0.9), lineWidth: 1)
+                .stroke(AppColors.cardBorder, lineWidth: 1)
         )
         .shadow(color: AppColors.primaryBlue.opacity(0.08), radius: 18, x: 0, y: 12)
     }
